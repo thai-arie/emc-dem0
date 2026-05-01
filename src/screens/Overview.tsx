@@ -32,6 +32,9 @@ export default function Overview() {
         <KpiCard label="Total disbursed" value={formatMoney(contracts.data?.cash.total_disbursed ?? 0)} />
         <KpiCard label="Total collected" value={formatMoney(contracts.data?.cash.total_collected ?? 0)} />
         <KpiCard label="Outstanding" value={formatMoney(contracts.data?.cash.outstanding ?? 0)} accent="var(--color-warn)" />
+        <KpiCard label="Overdue amount" value={formatMoney(contracts.data?.cash.overdue_amount ?? 0)} accent="var(--color-danger)" />
+        <KpiCard label="Active contracts" value={contracts.data?.cash.active_contracts ?? 0} />
+        <KpiCard label="Overdue contracts" value={contracts.data?.cash.overdue_contracts ?? 0} accent="var(--color-danger)" />
       </div>
       <section className="screen-panel">
         <h2>Needs attention</h2>

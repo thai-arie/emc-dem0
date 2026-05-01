@@ -55,19 +55,58 @@ function refresh() {
 export interface ContractsResponse {
   contracts: Array<Contract & { client: string; phone: string }>;
   payments: Payment[];
-  cash: { total_disbursed: number; total_collected: number; outstanding: number };
+  cash: { total_disbursed: number; total_collected: number; outstanding: number; overdue_amount: number; active_contracts: number; overdue_contracts: number };
+}
+
+export interface ContractDetailResponse {
+  contract: Contract;
+  client: Client;
+  vehicle: Vehicle;
+  gps: GPSDevice;
+  payments: Payment[];
+  cases: CollectionsCase[];
+  audit: AuditEntry[];
+  financials: { paid_to_date: number; outstanding_balance: number; overdue_amount: number };
+}
+
+export interface ClientProfileResponse {
+  client: Client;
+  contracts: Contract[];
+  payments: Payment[];
+  cases: CollectionsCase[];
+  audit: AuditEntry[];
+}
+
+export interface CreateContractPayload extends ActorPayload {
+  client_name: string;
+  phone: string;
+  address: string;
+  national_id: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  vehicle_brand: string;
+  vehicle_model: string;
+  vin: string;
+  plate: string;
+  vehicle_price: number;
+  down_payment: number;
+  financed_amount: number;
+  monthly_total: number;
+  term_months: number;
+  start_date: string;
 }
 
 export const api = {
   getContracts: () => request<ContractsResponse>("/contracts"),
-  getContract: (id: string) => request<{ contract: Contract; client: Client; vehicle: Vehicle; gps: GPSDevice }>(`/contracts/${id}`),
-  createContract: async (body: { client_name: string; phone: string; monthly_total: number; term_months: number }) => {
+  getContract: (id: string) => request<ContractDetailResponse>(`/contracts/${id}`),
+  getClient: (id: string) => request<ClientProfileResponse>(`/clients/${id}`),
+  createContract: async (body: CreateContractPayload) => {
     const result = await request<Contract>("/contracts", { method: "POST", body: JSON.stringify(body) });
     refresh();
     return result;
   },
   getInstallments: (contract_id?: string) => request<{ installments: Array<Installment & { client?: string }>; payments: Payment[] }>(`/installments${contract_id ? `?contract_id=${encodeURIComponent(contract_id)}` : ""}`),
-  recordPayment: async (body: { installment_id: string; method: "cash" | "transfer" } & ActorPayload) => {
+  recordPayment: async (body: { installment_id: string; amount: number; method: Payment["method"]; reference: string; note: string } & ActorPayload) => {
     const result = await request<Payment>("/payments", { method: "POST", body: JSON.stringify(body) });
     refresh();
     return result;

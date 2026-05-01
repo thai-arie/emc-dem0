@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import DataTable from "../components/DataTable";
 import StatusBadge from "../components/StatusBadge";
 import { useAuth } from "../store/auth";
@@ -20,10 +20,11 @@ export default function CollectionsWorkspace() {
         onRowClick={(row) => navigate(`/collections/${row.id}`)}
         searchKey={(row) => `${row.id} ${row.contract_id} ${row.client} ${row.status}`}
         filters={[{ label: "OPEN", predicate: (row) => row.status === "OPEN" }, { label: "IMMOBILIZER_ARMED", predicate: (row) => row.status === "IMMOBILIZER_ARMED" }]}
+        exportCSV="collections.csv"
         columns={[
           { key: "id", header: "ID" },
           { key: "contract_id", header: "Contract" },
-          { key: "client", header: "Client" },
+          { key: "client", header: "Client", render: (row) => <Link onClick={(event) => event.stopPropagation()} to={`/clients/${row.client_id}`}>{row.client}</Link> },
           { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> }
         ]}
       />

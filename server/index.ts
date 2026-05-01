@@ -31,6 +31,10 @@ function addMonths(value: string, months: number) {
   return date.toISOString();
 }
 
+function cents(value: unknown) {
+  return Math.round(Number(value || 0));
+}
+
 function seedIfEmpty() {
   const existing = row<{ count: number }>("SELECT COUNT(*) AS count FROM contracts")?.count ?? 0;
   if (existing) return;
@@ -43,14 +47,15 @@ function seedIfEmpty() {
       const contractId = special ? "KT-0341" : `KT-${suffix}`;
       const vehicleId = `VEH-${suffix}`;
       const gpsId = `GPS-${suffix}`;
-      db.prepare("INSERT INTO clients VALUES (?, ?, ?)").run(clientId, special ? "Dara Sok" : `Client ${suffix}`, `+85510${String(100000 + i).slice(1)}`);
-      db.prepare("INSERT INTO contracts VALUES (?, ?, ?, ?, ?, ?, ?)").run(contractId, clientId, vehicleId, special ? "OVERDUE" : "ACTIVE", 32500 + i * 200, "2025-01-01T00:00:00.000Z", 36);
+      const monthly = 32500 + i * 200;
+      db.prepare("INSERT INTO clients (id, full_name, phone, address, national_id, emergency_contact_name, emergency_contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?)").run(clientId, special ? "Dara Sok" : `Client ${suffix}`, `+85510${String(100000 + i).slice(1)}`, "Phnom Penh", `NID-${suffix}`, "Emergency contact", `+85512${String(100000 + i).slice(1)}`);
+      db.prepare("INSERT INTO contracts (id, client_id, vehicle_id, status, monthly_total, start_date, term_months, vehicle_price, down_payment, financed_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(contractId, clientId, vehicleId, special ? "OVERDUE" : "ACTIVE", monthly, "2025-01-01T00:00:00.000Z", 36, monthly * 36, 0, monthly * 36);
       db.prepare("INSERT INTO vehicles VALUES (?, ?, ?, ?, ?, ?, ?)").run(vehicleId, `VINEMC${1000000 + i}`, "Toyota", "Vios", special ? "2AB-0341" : `2AB-${suffix}`, contractId, gpsId);
       db.prepare("INSERT INTO gps_devices VALUES (?, ?, ?, ?, ?, ?)").run(gpsId, vehicleId, "ONLINE", 11.5564 + ((i % 9) - 4) * 0.01, 104.9282 + ((i % 7) - 3) * 0.012, at);
       for (let m = 1; m <= 36; m += 1) {
         const dueDate = addMonths("2025-01-01T00:00:00.000Z", m);
         const status = special ? (m === 15 ? "OVERDUE" : m < 15 ? "PAID" : "SCHEDULED") : m <= 16 ? "PAID" : "SCHEDULED";
-        db.prepare("INSERT INTO installments VALUES (?, ?, ?, ?, ?, ?, ?)").run(`INS-${suffix}-${String(m).padStart(2, "0")}`, contractId, m, dueDate, 32500 + i * 200, status, status === "PAID" ? dueDate : null);
+        db.prepare("INSERT INTO installments VALUES (?, ?, ?, ?, ?, ?, ?)").run(`INS-${suffix}-${String(m).padStart(2, "0")}`, contractId, m, dueDate, monthly, status, status === "PAID" ? dueDate : null);
       }
     }
     db.prepare("INSERT INTO collections_cases VALUES (?, ?, ?, ?, ?, ?)").run("COL-0341", "KT-0341", "CL-0341", "OPEN", at, null);
@@ -113,13 +118,23 @@ function repairLegacyNewContractRows() {
   tx();
 }
 
+function repairOperationalDefaults() {
+  db.prepare("UPDATE contracts SET vehicle_price = monthly_total * term_months WHERE vehicle_price = 0").run();
+  db.prepare("UPDATE contracts SET financed_amount = monthly_total * term_months WHERE financed_amount = 0").run();
+  db.prepare("UPDATE clients SET address = 'Phnom Penh' WHERE address = ''").run();
+  db.prepare("UPDATE clients SET national_id = id WHERE national_id = ''").run();
+}
+
 function ensureCollectionCase(contractId: string, at: string) {
   const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [contractId]);
   if (!contract) return;
   const overdue = row<any>("SELECT * FROM installments WHERE contract_id = ? AND status = 'OVERDUE' LIMIT 1", [contractId]);
   const open = row<any>("SELECT * FROM collections_cases WHERE contract_id = ? AND status != 'CLOSED' LIMIT 1", [contractId]);
   if (overdue && !open) {
-    db.prepare("INSERT INTO collections_cases VALUES (?, ?, ?, ?, ?, ?)").run(nextId("COL"), contract.id, contract.client_id, "OPEN", at, null);
+    const caseId = nextId("COL");
+    const created = { id: caseId, contract_id: contract.id, client_id: contract.client_id, status: "OPEN", opened_at: at, cured_at: null };
+    db.prepare("INSERT INTO collections_cases VALUES (?, ?, ?, ?, ?, ?)").run(caseId, contract.id, contract.client_id, "OPEN", at, null);
+    audit("USR-COL", "COLLECTIONS", "case", caseId, "collections.case_created", null, created);
   }
 }
 
@@ -156,15 +171,19 @@ function refreshOverdueState() {
 seedIfEmpty();
 repairSeededDemoRows();
 repairLegacyNewContractRows();
+repairOperationalDefaults();
 
 app.get("/contracts", (_req, res) => {
   refreshOverdueState();
   const contracts = rows<any>("SELECT c.*, cl.full_name AS client, cl.phone FROM contracts c JOIN clients cl ON cl.id = c.client_id ORDER BY c.id");
   const payments = rows<any>("SELECT * FROM payments ORDER BY recorded_at DESC LIMIT 20");
-  const total_disbursed = contracts.reduce((sum, contract) => sum + contract.monthly_total * contract.term_months, 0);
+  const total_disbursed = contracts.reduce((sum, contract) => sum + (contract.financed_amount || contract.monthly_total * contract.term_months), 0);
   const total_collected = row<{ value: number }>("SELECT COALESCE(SUM(amount), 0) AS value FROM payments")?.value ?? 0;
   const outstanding = row<{ value: number }>("SELECT COALESCE(SUM(amount_due), 0) AS value FROM installments WHERE status != 'PAID'")?.value ?? 0;
-  res.json({ contracts, payments, cash: { total_disbursed, total_collected, outstanding } });
+  const overdue_amount = row<{ value: number }>("SELECT COALESCE(SUM(amount_due), 0) AS value FROM installments WHERE status = 'OVERDUE'")?.value ?? 0;
+  const active_contracts = contracts.filter((contract) => contract.status === "ACTIVE").length;
+  const overdue_contracts = contracts.filter((contract) => contract.status === "OVERDUE").length;
+  res.json({ contracts, payments, cash: { total_disbursed, total_collected, outstanding, overdue_amount, active_contracts, overdue_contracts } });
 });
 
 app.get("/contracts/:id", (req, res) => {
@@ -174,32 +193,51 @@ app.get("/contracts/:id", (req, res) => {
   const client = row<any>("SELECT * FROM clients WHERE id = ?", [contract.client_id]);
   const vehicle = row<any>("SELECT * FROM vehicles WHERE id = ?", [contract.vehicle_id]);
   const gps = vehicle ? row<any>("SELECT * FROM gps_devices WHERE vehicle_id = ?", [vehicle.id]) : null;
-  res.json({ contract, client, vehicle, gps: gps ? jsonGps(gps) : null });
+  const payments = rows<any>("SELECT * FROM payments WHERE contract_id = ? ORDER BY recorded_at DESC", [contract.id]);
+  const cases = rows<any>("SELECT * FROM collections_cases WHERE contract_id = ? ORDER BY opened_at DESC", [contract.id]);
+  const installments = rows<any>("SELECT id FROM installments WHERE contract_id = ?", [contract.id]);
+  const auditEntityIds = [contract.id, client.id, vehicle.id, gps?.id ?? "", ...payments.map((item) => item.id), ...cases.map((item) => item.id), ...installments.map((item) => item.id)];
+  const auditRows = rows<any>(`SELECT id, ts, actor_id, actor_role, entity_type, entity_id, action, before_json, after_json FROM audit WHERE entity_id IN (${auditEntityIds.map(() => "?").join(",")}) ORDER BY ts`, auditEntityIds);
+  const paid_to_date = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const outstanding_balance = row<{ value: number }>("SELECT COALESCE(SUM(amount_due), 0) AS value FROM installments WHERE contract_id = ? AND status != 'PAID'", [contract.id])?.value ?? 0;
+  const overdue_amount = row<{ value: number }>("SELECT COALESCE(SUM(amount_due), 0) AS value FROM installments WHERE contract_id = ? AND status = 'OVERDUE'", [contract.id])?.value ?? 0;
+  res.json({ contract, client, vehicle, gps: gps ? jsonGps(gps) : null, payments, cases, audit: auditRows.map((item) => ({ ...item, before: item.before_json ? JSON.parse(item.before_json) : null, after: item.after_json ? JSON.parse(item.after_json) : null })), financials: { paid_to_date, outstanding_balance, overdue_amount } });
 });
 
 app.post("/contracts", (req, res) => {
   const at = nowIso();
-  const startDate = new Date(at);
-  const monthly = Math.round(Number(req.body.monthly_total || 0));
+  const a = actor(req.body);
+  const startDate = new Date(req.body.start_date || at);
+  const startIso = startDate.toISOString();
+  const monthly = cents(req.body.monthly_total);
   const term = Math.max(1, Number(req.body.term_months || 1));
-  if (!req.body.client_name || !req.body.phone || monthly <= 0) return res.status(400).json({ error: "Invalid contract" });
+  const vehiclePrice = cents(req.body.vehicle_price);
+  const downPayment = cents(req.body.down_payment);
+  const financedAmount = cents(req.body.financed_amount || vehiclePrice - downPayment);
+  if (!req.body.client_name || !req.body.phone || monthly <= 0 || !req.body.vehicle_brand || !req.body.vehicle_model || !req.body.vin || !req.body.plate) return res.status(400).json({ error: "Invalid contract" });
   const suffix = String(Date.now()).slice(-4);
   const clientId = nextId("CL");
   const contractId = `KT-${suffix}`;
   const vehicleId = nextId("VEH");
   const gpsId = nextId("GPS");
   const tx = db.transaction(() => {
-    db.prepare("INSERT INTO clients VALUES (?, ?, ?)").run(clientId, req.body.client_name, req.body.phone);
-    db.prepare("INSERT INTO contracts VALUES (?, ?, ?, ?, ?, ?, ?)").run(contractId, clientId, vehicleId, "ACTIVE", monthly, at, term);
-    db.prepare("INSERT INTO vehicles VALUES (?, ?, ?, ?, ?, ?, ?)").run(vehicleId, `VIN${suffix}${clientId}`, "Toyota", "Vios", `NEW-${suffix}`, contractId, gpsId);
+    const client = { id: clientId, full_name: req.body.client_name, phone: req.body.phone, address: req.body.address || "", national_id: req.body.national_id || "", emergency_contact_name: req.body.emergency_contact_name || "", emergency_contact_phone: req.body.emergency_contact_phone || "" };
+    const contract = { id: contractId, client_id: clientId, vehicle_id: vehicleId, status: "ACTIVE", monthly_total: monthly, start_date: startIso, term_months: term, vehicle_price: vehiclePrice, down_payment: downPayment, financed_amount: financedAmount };
+    db.prepare("INSERT INTO clients (id, full_name, phone, address, national_id, emergency_contact_name, emergency_contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?)").run(client.id, client.full_name, client.phone, client.address, client.national_id, client.emergency_contact_name, client.emergency_contact_phone);
+    db.prepare("INSERT INTO contracts (id, client_id, vehicle_id, status, monthly_total, start_date, term_months, vehicle_price, down_payment, financed_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(contract.id, contract.client_id, contract.vehicle_id, contract.status, contract.monthly_total, contract.start_date, contract.term_months, contract.vehicle_price, contract.down_payment, contract.financed_amount);
+    db.prepare("INSERT INTO vehicles VALUES (?, ?, ?, ?, ?, ?, ?)").run(vehicleId, req.body.vin, req.body.vehicle_brand, req.body.vehicle_model, req.body.plate, contractId, gpsId);
     db.prepare("INSERT INTO gps_devices VALUES (?, ?, ?, ?, ?, ?)").run(gpsId, vehicleId, "ONLINE", 11.5564, 104.9282, at);
     for (let i = 1; i <= term; i += 1) {
       const due = new Date(startDate);
       due.setUTCMonth(startDate.getUTCMonth() + i);
-      db.prepare("INSERT INTO installments VALUES (?, ?, ?, ?, ?, ?, ?)").run(nextId("INS"), contractId, i, due.toISOString(), monthly, "SCHEDULED", null);
+      const status = localDateKey(due) < localDateKey(new Date()) ? "OVERDUE" : "SCHEDULED";
+      db.prepare("INSERT INTO installments VALUES (?, ?, ?, ?, ?, ?, ?)").run(nextId("INS"), contractId, i, due.toISOString(), monthly, status, null);
     }
+    audit(a.actor_id, a.actor_role, "client", clientId, "client.created", null, client);
+    audit(a.actor_id, a.actor_role, "contract", contractId, "contract.created", null, contract);
   });
   tx();
+  refreshOverdueState();
   res.status(201).json(row<any>("SELECT * FROM contracts WHERE id = ?", [contractId]));
 });
 
@@ -213,6 +251,29 @@ app.get("/installments", (req, res) => {
   res.json({ installments, payments });
 });
 
+app.get("/clients/:id", (req, res) => {
+  refreshOverdueState();
+  const client = row<any>("SELECT * FROM clients WHERE id = ?", [req.params.id]);
+  if (!client) return res.status(404).json({ error: "Client not found" });
+  const contracts = rows<any>("SELECT * FROM contracts WHERE client_id = ? ORDER BY start_date DESC", [client.id]);
+  const contractIds = contracts.map((contract) => contract.id);
+  const cases = rows<any>("SELECT * FROM collections_cases WHERE client_id = ? ORDER BY opened_at DESC", [client.id]);
+  const payments = contractIds.length
+    ? rows<any>(`SELECT * FROM payments WHERE contract_id IN (${contractIds.map(() => "?").join(",")}) ORDER BY recorded_at DESC`, contractIds)
+    : [];
+  const entityIds = [client.id, ...contractIds, ...cases.map((item) => item.id), ...payments.map((item) => item.id)];
+  const auditRows = entityIds.length
+    ? rows<any>(`SELECT id, ts, actor_id, actor_role, entity_type, entity_id, action, before_json, after_json FROM audit WHERE entity_id IN (${entityIds.map(() => "?").join(",")}) ORDER BY ts`, entityIds)
+    : [];
+  res.json({
+    client,
+    contracts,
+    payments,
+    cases,
+    audit: auditRows.map((item) => ({ ...item, before: item.before_json ? JSON.parse(item.before_json) : null, after: item.after_json ? JSON.parse(item.after_json) : null }))
+  });
+});
+
 app.post("/payments", (req, res) => {
   const a = actor(req.body);
   if (a.actor_role !== "COLLECTIONS") return res.status(403).json({ error: "Forbidden" });
@@ -220,11 +281,22 @@ app.post("/payments", (req, res) => {
   if (!installment || !["DUE", "OVERDUE"].includes(installment.status)) return res.status(409).json({ error: "Invalid installment transition" });
   const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [installment.contract_id]);
   const at = nowIso();
-  const payment = { id: nextId("PAY"), contract_id: installment.contract_id, installment_id: installment.id, amount: installment.amount_due, method: req.body.method === "transfer" ? "transfer" : "cash", recorded_at: at, recorded_by: a.actor_id };
+  const method = ["cash", "transfer", "aba", "wing"].includes(req.body.method) ? req.body.method : "cash";
+  const payment = {
+    id: nextId("PAY"),
+    contract_id: installment.contract_id,
+    installment_id: installment.id,
+    amount: cents(req.body.amount || installment.amount_due),
+    method,
+    reference: req.body.reference || "",
+    note: req.body.note || "",
+    recorded_at: at,
+    recorded_by: a.actor_id
+  };
   const tx = db.transaction(() => {
-    db.prepare("INSERT INTO payments VALUES (?, ?, ?, ?, ?, ?, ?)").run(payment.id, payment.contract_id, payment.installment_id, payment.amount, payment.method, payment.recorded_at, payment.recorded_by);
+    db.prepare("INSERT INTO payments (id, contract_id, installment_id, amount, method, reference, note, recorded_at, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(payment.id, payment.contract_id, payment.installment_id, payment.amount, payment.method, payment.reference, payment.note, payment.recorded_at, payment.recorded_by);
     db.prepare("UPDATE installments SET status = 'PAID', paid_at = ? WHERE id = ?").run(at, installment.id);
-    audit(a.actor_id, a.actor_role, "payment", payment.id, "payment.record", null, payment);
+    audit(a.actor_id, a.actor_role, "payment", payment.id, "payment.recorded", null, payment);
     audit(a.actor_id, a.actor_role, "installment", installment.id, "installment.status_change", installment, { ...installment, status: "PAID", paid_at: at });
     const overdueLeft = row<any>("SELECT * FROM installments WHERE contract_id = ? AND status = 'OVERDUE' LIMIT 1", [installment.contract_id]);
     if (!overdueLeft && contract?.status === "OVERDUE") {

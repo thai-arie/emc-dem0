@@ -3,6 +3,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite --host 127.0.0.1",
     "dev:server": "ts-node server/index.ts",
+    "db:reset": "ts-node server/reset-db.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

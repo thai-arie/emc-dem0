@@ -10,6 +10,10 @@ export interface Client {
   id: string;
   full_name: string;
   phone: string;
+  address: string;
+  national_id: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
 }
 
 export interface Contract {
@@ -20,6 +24,9 @@ export interface Contract {
   monthly_total: number;
   start_date: string;
   term_months: number;
+  vehicle_price: number;
+  down_payment: number;
+  financed_amount: number;
 }
 
 export interface Vehicle {
@@ -55,7 +62,9 @@ export interface Payment {
   contract_id: string;
   installment_id: string;
   amount: number;
-  method: "cash" | "transfer";
+  method: "cash" | "transfer" | "aba" | "wing";
+  reference: string;
+  note: string;
   recorded_at: string;
   recorded_by: string;
 }
@@ -95,7 +104,7 @@ export interface AuditEntry {
   ts: string;
   actor_id: string;
   actor_role: Role;
-  entity_type: "contract" | "case" | "installment" | "payment" | "vehicle" | "alert";
+  entity_type: "client" | "contract" | "case" | "installment" | "payment" | "vehicle" | "alert";
   entity_id: string;
   action: string;
   before: unknown | null;

@@ -9,6 +9,7 @@ export interface Column<T> {
   header: string;
   render?: (row: T) => ReactNode;
   sortValue?: (row: T) => string | number;
+  csvValue?: (row: T) => unknown;
 }
 
 export interface Filter<T> {
@@ -64,7 +65,10 @@ export default function DataTable<T>({ rows, columns, rowKey, onRowClick, search
             </div>
           ) : null}
           {exportCSV ? (
-            <button className={styles.exportButton} onClick={() => downloadCsv(exportCSV, toCsv(filtered, columns))}>
+            <button
+              className={styles.exportButton}
+              onClick={() => downloadCsv(exportCSV, toCsv(filtered, columns.map((column) => ({ ...column, render: column.csvValue ?? ((row: T) => (row as Record<string, unknown>)[String(column.key)]) }))))}
+            >
               CSV
             </button>
           ) : null}

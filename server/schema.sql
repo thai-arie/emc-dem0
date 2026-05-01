@@ -1,7 +1,11 @@
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
-  phone TEXT NOT NULL
+  phone TEXT NOT NULL,
+  address TEXT NOT NULL DEFAULT '',
+  national_id TEXT NOT NULL DEFAULT '',
+  emergency_contact_name TEXT NOT NULL DEFAULT '',
+  emergency_contact_phone TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS contracts (
@@ -11,7 +15,10 @@ CREATE TABLE IF NOT EXISTS contracts (
   status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'OVERDUE')),
   monthly_total INTEGER NOT NULL,
   start_date TEXT NOT NULL,
-  term_months INTEGER NOT NULL
+  term_months INTEGER NOT NULL,
+  vehicle_price INTEGER NOT NULL DEFAULT 0,
+  down_payment INTEGER NOT NULL DEFAULT 0,
+  financed_amount INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS vehicles (
@@ -48,7 +55,9 @@ CREATE TABLE IF NOT EXISTS payments (
   contract_id TEXT NOT NULL,
   installment_id TEXT NOT NULL,
   amount INTEGER NOT NULL,
-  method TEXT NOT NULL CHECK (method IN ('cash', 'transfer')),
+  method TEXT NOT NULL CHECK (method IN ('cash', 'transfer', 'aba', 'wing')),
+  reference TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
   recorded_at TEXT NOT NULL,
   recorded_by TEXT NOT NULL
 );
@@ -88,7 +97,7 @@ CREATE TABLE IF NOT EXISTS audit (
   ts TEXT NOT NULL,
   actor_id TEXT NOT NULL,
   actor_role TEXT NOT NULL CHECK (actor_role IN ('CEO', 'COLLECTIONS', 'OPS')),
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('contract', 'case', 'installment', 'payment', 'vehicle', 'alert')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert')),
   entity_id TEXT NOT NULL,
   action TEXT NOT NULL,
   before_json TEXT,

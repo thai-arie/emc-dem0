@@ -4,7 +4,8 @@
   height: 100vh;
   border-right: 1px solid rgba(111, 159, 194, 0.18);
   background:
-    linear-gradient(180deg, rgba(7, 19, 35, 0.98), rgba(5, 12, 24, 0.98)),
+    radial-gradient(circle at 30% 0%, rgba(56, 216, 196, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(8, 21, 39, 0.99), rgba(4, 10, 21, 0.99)),
     var(--color-bg);
   padding: 24px 16px;
   box-shadow: 18px 0 44px rgba(0, 0, 0, 0.18);
@@ -16,6 +17,7 @@
   font-weight: 900;
   margin: 0 8px 34px;
   color: var(--color-text);
+  text-shadow: 0 0 28px rgba(56, 216, 196, 0.16);
 }
 
 .brand::after {
@@ -31,8 +33,9 @@
   color: var(--color-muted);
   font-size: 10px;
   font-weight: 850;
-  margin: 24px 8px 9px;
-  letter-spacing: 0.08em;
+  margin: 26px 8px 10px;
+  letter-spacing: 0.11em;
+  opacity: 0.74;
 }
 
 .nav {
@@ -43,20 +46,32 @@
 .link {
   display: flex;
   align-items: center;
-  min-height: 38px;
+  min-height: 40px;
   border-radius: var(--radius);
   padding: 9px 12px;
   color: var(--color-muted);
   border: 1px solid transparent;
   font-weight: 720;
+  position: relative;
 }
 
 .link:hover,
 .active {
-  background: linear-gradient(90deg, rgba(56, 216, 196, 0.14), rgba(16, 36, 61, 0.72));
-  border-color: rgba(56, 216, 196, 0.22);
+  background: linear-gradient(90deg, rgba(56, 216, 196, 0.18), rgba(16, 36, 61, 0.82));
+  border-color: rgba(56, 216, 196, 0.38);
   color: var(--color-text);
-  box-shadow: inset 3px 0 0 var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-accent), 0 12px 28px rgba(56, 216, 196, 0.08);
+}
+
+.active::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-accent-strong);
+  box-shadow: 0 0 16px rgba(107, 243, 226, 0.9);
 }
 
 @media (max-width: 920px) {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import DataTable from "../components/DataTable";
 import WorkflowStepper from "../components/WorkflowStepper";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -24,7 +24,7 @@ export default function CollectionsCaseDetail() {
       <div className="screen-header">
         <div>
           <h1 className="screen-title">{kase.id}</h1>
-          <p className="screen-muted">{kase.contract_id} · {kase.client}</p>
+          <p className="screen-muted">{kase.contract_id} · <Link to={`/clients/${kase.client_id}`}>{kase.client}</Link></p>
         </div>
         <StatusBadge status={kase.status} />
       </div>

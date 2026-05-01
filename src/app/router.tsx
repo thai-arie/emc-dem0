@@ -4,6 +4,7 @@ import Login from "../screens/Login";
 import Overview from "../screens/Overview";
 import ContractsList from "../screens/ContractsList";
 import ContractDetail from "../screens/ContractDetail";
+import ClientProfile from "../screens/ClientProfile";
 import Payments from "../screens/Payments";
 import CollectionsWorkspace from "../screens/CollectionsWorkspace";
 import CollectionsCaseDetail from "../screens/CollectionsCaseDetail";
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Overview /> },
       { path: "contracts", element: <ContractsList /> },
       { path: "contracts/:id", element: <ContractDetail /> },
+      { path: "clients/:id", element: <ClientProfile /> },
       { path: "payments", element: <Payments /> },
       { path: "collections", element: <CollectionsWorkspace /> },
       { path: "collections/:id", element: <CollectionsCaseDetail /> },
