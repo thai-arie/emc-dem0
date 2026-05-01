@@ -1,0 +1,43 @@
+.topbar {
+  height: 74px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 26px;
+  background: rgba(5, 13, 25, 0.82);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 16px 36px rgba(0, 0, 0, 0.14);
+}
+
+.brand {
+  font-weight: 900;
+  font-size: 16px;
+}
+
+.subtle {
+  color: var(--color-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.userChip {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 8px 11px;
+  color: var(--color-muted-strong);
+  min-width: 132px;
+  background: rgba(16, 36, 61, 0.66);
+  outline: none;
+}
+
+.userChip:focus {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 3px rgba(56, 216, 196, 0.12);
+}

@@ -1,0 +1,19 @@
+.map {
+  min-height: 620px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  background: var(--color-panel);
+}
+
+.map :global(.leaflet-container) {
+  background: #07111f;
+  font-family: var(--font-sans);
+}
+
+.map :global(.leaflet-control-zoom a) {
+  background: rgba(8, 20, 38, 0.92);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}

@@ -1,0 +1,21 @@
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.step,
+.activeStep {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 13px;
+  opacity: 0.42;
+  background: rgba(5, 11, 22, 0.32);
+}
+
+.activeStep {
+  opacity: 1;
+  background: linear-gradient(180deg, rgba(56, 216, 196, 0.14), rgba(16, 36, 61, 0.86));
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-glow);
+}

@@ -1,0 +1,67 @@
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  border-right: 1px solid rgba(111, 159, 194, 0.18);
+  background:
+    linear-gradient(180deg, rgba(7, 19, 35, 0.98), rgba(5, 12, 24, 0.98)),
+    var(--color-bg);
+  padding: 24px 16px;
+  box-shadow: 18px 0 44px rgba(0, 0, 0, 0.18);
+}
+
+.brand {
+  position: relative;
+  font-size: 19px;
+  font-weight: 900;
+  margin: 0 8px 34px;
+  color: var(--color-text);
+}
+
+.brand::after {
+  content: "Operating System";
+  display: block;
+  margin-top: 4px;
+  color: var(--color-gold-soft);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.groupTitle {
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 850;
+  margin: 24px 8px 9px;
+  letter-spacing: 0.08em;
+}
+
+.nav {
+  display: grid;
+  gap: 4px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  color: var(--color-muted);
+  border: 1px solid transparent;
+  font-weight: 720;
+}
+
+.link:hover,
+.active {
+  background: linear-gradient(90deg, rgba(56, 216, 196, 0.14), rgba(16, 36, 61, 0.72));
+  border-color: rgba(56, 216, 196, 0.22);
+  color: var(--color-text);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+@media (max-width: 920px) {
+  .sidebar {
+    position: static;
+    height: auto;
+  }
+}

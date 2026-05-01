@@ -1,0 +1,232 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% -10%, rgba(56, 216, 196, 0.13), transparent 30%),
+    radial-gradient(circle at 88% 2%, rgba(215, 177, 90, 0.1), transparent 28%),
+    linear-gradient(145deg, #050b16 0%, #081426 48%, #050b16 100%);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+select {
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-blank-shell {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.screen {
+  display: grid;
+  gap: 20px;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.screen-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 2px;
+}
+
+.screen-title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.screen-muted {
+  color: var(--color-muted);
+}
+
+.screen-panel {
+  background: linear-gradient(180deg, rgba(16, 36, 61, 0.92), rgba(9, 21, 38, 0.96));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.screen-panel h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 820;
+  color: var(--color-muted-strong);
+}
+
+.screen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 9px 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+.primary-button {
+  background: linear-gradient(180deg, var(--color-accent-strong), var(--color-accent));
+  border-color: rgba(107, 243, 226, 0.72);
+  color: #061419;
+  font-weight: 800;
+}
+
+.secondary-button {
+  background: linear-gradient(180deg, rgba(21, 46, 76, 0.96), rgba(13, 30, 52, 0.96));
+}
+
+.danger-button {
+  background: linear-gradient(180deg, #ff7b83, var(--color-danger));
+  border-color: rgba(255, 123, 131, 0.72);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 24% 12%, rgba(56, 216, 196, 0.18), transparent 32%),
+    radial-gradient(circle at 78% 84%, rgba(215, 177, 90, 0.16), transparent 30%),
+    linear-gradient(145deg, #050b16, #09182b 54%, #050b16);
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(520px, calc(100vw - 32px));
+  background: linear-gradient(180deg, rgba(16, 36, 61, 0.92), rgba(8, 20, 38, 0.98));
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  padding: 30px;
+  box-shadow: var(--shadow-soft);
+}
+
+.login-panel h1 {
+  margin: 0 0 20px;
+  font-size: 30px;
+  font-weight: 880;
+}
+
+.role-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.form-grid input,
+.form-grid select {
+  width: 100%;
+  background: rgba(5, 11, 22, 0.44);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  padding: 10px 11px;
+  outline: none;
+}
+
+.form-grid input:focus,
+.form-grid select:focus {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 3px rgba(56, 216, 196, 0.12);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab {
+  background: rgba(16, 36, 61, 0.72);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.tab-active {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  background: rgba(56, 216, 196, 0.1);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+.empty {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: 34px;
+  text-align: center;
+  color: var(--color-muted);
+  background: rgba(13, 27, 47, 0.42);
+}
+
+.empty h2 {
+  color: var(--color-text);
+  margin: 0 0 6px;
+}
+
+.empty p {
+  margin: 0;
+}

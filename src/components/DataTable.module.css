@@ -1,0 +1,117 @@
+.wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search {
+  min-width: 260px;
+  background: rgba(5, 11, 22, 0.46);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  padding: 9px 11px;
+  outline: none;
+}
+
+.search:focus {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 3px rgba(56, 216, 196, 0.12);
+}
+
+.tools,
+.filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter,
+.activeFilter,
+.exportButton {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: rgba(16, 36, 61, 0.74);
+  color: var(--color-muted);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.activeFilter {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  background: rgba(56, 216, 196, 0.12);
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: linear-gradient(180deg, rgba(13, 29, 50, 0.94), rgba(8, 18, 34, 0.94));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  background: rgba(5, 11, 22, 0.46);
+}
+
+.table th button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted-strong);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr {
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  background: rgba(56, 216, 196, 0.07);
+  box-shadow: inset 3px 0 0 rgba(56, 216, 196, 0.66);
+}
+
+@media (max-width: 760px) {
+  .table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .search {
+    width: 100%;
+  }
+}

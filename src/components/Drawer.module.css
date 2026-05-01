@@ -1,0 +1,42 @@
+.drawer {
+  position: fixed;
+  right: 0;
+  top: 72px;
+  bottom: 0;
+  width: 380px;
+  background:
+    linear-gradient(180deg, rgba(16, 36, 61, 0.98), rgba(6, 15, 29, 0.98));
+  border-left: 1px solid var(--color-border-strong);
+  padding: 20px;
+  z-index: 8;
+  box-shadow: var(--shadow-soft);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 880;
+}
+
+.header button {
+  background: rgba(16, 36, 61, 0.78);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  padding: 8px 10px;
+}
+
+.drawer p {
+  margin: 12px 0;
+  color: var(--color-muted-strong);
+}

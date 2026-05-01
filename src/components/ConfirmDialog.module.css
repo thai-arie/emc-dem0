@@ -1,0 +1,49 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(7px);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+  background: linear-gradient(180deg, rgba(16, 36, 61, 0.98), rgba(7, 17, 31, 0.98));
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.dialog h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  font-weight: 880;
+}
+
+.message {
+  color: var(--color-muted);
+  margin-bottom: 18px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.actions button {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: rgba(16, 36, 61, 0.78);
+  color: var(--color-text);
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.confirm {
+  background: var(--color-danger) !important;
+  border-color: var(--color-danger) !important;
+}
