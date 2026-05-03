@@ -4,6 +4,13 @@ import { actorFromUser, api, useApiData } from "../services/api";
 import { useAuth } from "../store/auth";
 import { useUi } from "../store/ui";
 import { formatDate } from "../lib/formatDate";
+import type { Alert } from "../entities/types";
+
+function alertType(alert: Alert) {
+  if (alert.severity === "CRITICAL") return "Immobilizer armed";
+  if (alert.severity === "WARN") return "Overdue contract";
+  return "INFO";
+}
 
 export default function Notifications() {
   const { data, reload } = useApiData(api.getAlerts);
@@ -20,6 +27,7 @@ export default function Notifications() {
         filters={[{ label: "Unresolved", predicate: (row) => !row.resolved_at }, { label: "CRITICAL", predicate: (row) => row.severity === "CRITICAL" }]}
         columns={[
           { key: "severity", header: "Severity", render: (row) => <StatusBadge status={row.severity} /> },
+          { key: "type", header: "Type", render: (row) => alertType(row) },
           { key: "title", header: "Title" },
           { key: "message", header: "Message" },
           { key: "created_at", header: "Created", render: (row) => formatDate(row.created_at) },

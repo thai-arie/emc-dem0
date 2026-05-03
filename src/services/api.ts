@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Alert, AuditEntry, Client, CollectionAction, CollectionsCase, Contract, GPSDevice, Installment, Payment, Role, Vehicle } from "../entities/types";
+import type { Alert, AuditEntry, Client, CollectionAction, CollectionsCase, Contract, GPSCommand, GPSDevice, Installment, Payment, Role, Vehicle } from "../entities/types";
 
 const API = "http://127.0.0.1:4000";
 
@@ -11,10 +11,15 @@ export interface ActorPayload {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
     ...init,
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: response.statusText }));
+    if (response.status === 401) {
+      window.localStorage.removeItem("emc.auth.user");
+      if (window.location.pathname !== "/login") window.location.assign("/login");
+    }
     throw new Error(body.error || response.statusText);
   }
   return response.json() as Promise<T>;
@@ -64,9 +69,9 @@ export interface ContractDetailResponse {
   vehicle: Vehicle;
   gps: GPSDevice;
   payments: Payment[];
-  cases: CollectionsCase[];
+  cases: Array<CollectionsCase & { overdue_amount?: number; last_action?: string | null }>;
   audit: AuditEntry[];
-  financials: { paid_to_date: number; outstanding_balance: number; overdue_amount: number };
+  financials: { paid_to_date: number; outstanding_balance: number; overdue_amount: number; credit_balance: number };
 }
 
 export interface ClientProfileResponse {
@@ -76,6 +81,89 @@ export interface ClientProfileResponse {
   cases: CollectionsCase[];
   audit: AuditEntry[];
 }
+
+export interface ReportingSummaryResponse {
+  portfolio: {
+    total_contracts: number;
+    active_contracts: number;
+    overdue_contracts: number;
+    overdue_percent: number;
+    total_outstanding: number;
+    total_overdue_amount: number;
+  };
+  payments: {
+    collected_today: number;
+    collected_last_7_days: number;
+    collected_last_30_days: number;
+    total_collected_all_time: number;
+  };
+  collections: {
+    open_cases: number;
+    cases_cured_this_month: number;
+    immobilizer_armed_count: number;
+    critical_alerts_count: number;
+  };
+}
+
+export interface AgingRow {
+  bucket: string;
+  contract_count: number;
+  amount_overdue: number;
+}
+
+export interface CashflowRow {
+  date: string;
+  amount_collected: number;
+  payment_count: number;
+}
+
+export type CollectionsCaseRow = CollectionsCase & {
+  client: string;
+  contract_status: Contract["status"];
+  dpd: number;
+  overdue_amount: number;
+  last_action: string;
+  gps_status: GPSDevice["status"];
+  workflow_next_action_type?: string;
+  restore_command_status?: string;
+  decision_reason: string;
+  restore_decision_reason?: string;
+};
+
+export type DeviceManagementRow = {
+  id: string;
+  device_id: string;
+  vehicle_id: string;
+  contract_id: string;
+  client_id: string;
+  client_name: string;
+  imei: string;
+  sim: string;
+  sim_number: string;
+  provider: string;
+  last_seen_at: string;
+  battery: number;
+  ignition: "ON" | "OFF";
+  latest_acknowledged_command_type: GPSCommand["command_type"] | null;
+  latest_acknowledged_command_status: GPSCommand["status"] | null;
+  latest_acknowledged_command_at: string | null;
+  computed_device_status: "ONLINE" | "RESTRICTED" | "WARNING";
+  status: "ONLINE" | "RESTRICTED" | "WARNING";
+  last_command: string;
+  last_command_status: string;
+  can_send_command: boolean;
+  missing_identity_reason: string | null;
+  device_health_alert: "FAILED_RELEASE" | null;
+};
+
+export interface DeviceDetailResponse {
+  device: DeviceManagementRow;
+  vehicle: Vehicle;
+  contract: Contract;
+  client: Client;
+  current_computed_status: "ONLINE" | "RESTRICTED" | "WARNING";
+  command_history: GPSCommand[];
+};
 
 export interface CreateContractPayload extends ActorPayload {
   client_name: string;
@@ -97,6 +185,15 @@ export interface CreateContractPayload extends ActorPayload {
 }
 
 export const api = {
+  login: async (email: string, password: string) => {
+    const result = await request<{ user: import("../entities/types").User }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    return result.user;
+  },
+  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  me: async () => {
+    const result = await request<{ user: import("../entities/types").User }>("/auth/me");
+    return result.user;
+  },
   getContracts: () => request<ContractsResponse>("/contracts"),
   getContract: (id: string) => request<ContractDetailResponse>(`/contracts/${id}`),
   getClient: (id: string) => request<ClientProfileResponse>(`/clients/${id}`),
@@ -106,29 +203,59 @@ export const api = {
     return result;
   },
   getInstallments: (contract_id?: string) => request<{ installments: Array<Installment & { client?: string }>; payments: Payment[] }>(`/installments${contract_id ? `?contract_id=${encodeURIComponent(contract_id)}` : ""}`),
-  recordPayment: async (body: { installment_id: string; amount: number; method: Payment["method"]; reference: string; note: string } & ActorPayload) => {
-    const result = await request<Payment>("/payments", { method: "POST", body: JSON.stringify(body) });
+  recordPayment: async (body: { installment_id: string; amount: number; method: Payment["method"]; reference: string; note: string; allocation_type?: Payment["allocation_type"]; idempotency_key?: string } & ActorPayload) => {
+    const result = await request<Payment>("/payments", { method: "POST", body: JSON.stringify({ ...body, idempotency_key: body.idempotency_key ?? crypto.randomUUID() }) });
     refresh();
     return result;
   },
-  getCollections: () => request<{ cases: Array<CollectionsCase & { client: string }>; actions: CollectionAction[] }>("/collections"),
+  getCollections: () => request<{ cases: CollectionsCaseRow[]; actions: CollectionAction[] }>("/collections"),
   sendSms: async (caseId: string, actor: ActorPayload) => {
     const result = await request<CollectionsCase>(`/collections/${caseId}/sms`, { method: "POST", body: JSON.stringify(actor) });
     refresh();
     return result;
   },
   immobilize: async (caseId: string, actor: ActorPayload) => {
-    const result = await request<Alert>(`/collections/${caseId}/immobilize`, { method: "POST", body: JSON.stringify(actor) });
+    const result = await request<{ status: "SENT"; command_id: string }>(`/collections/${caseId}/immobilize`, { method: "POST", body: JSON.stringify(actor) });
     refresh();
     return result;
   },
-  getGps: () => request<{ vehicles: Vehicle[]; gpsDevices: GPSDevice[] }>("/gps"),
+  approveImmobilizer: async (caseId: string, actor: ActorPayload) => {
+    const result = await request<CollectionsCase>(`/collections/${caseId}/approve-immobilizer`, { method: "POST", body: JSON.stringify(actor) });
+    refresh();
+    return result;
+  },
+  approveRestoreAccess: async (caseId: string, actor: ActorPayload) => {
+    const result = await request<{ status: string; command_id: string }>(`/collections/${caseId}/approve-restore`, { method: "POST", body: JSON.stringify(actor) });
+    refresh();
+    return result;
+  },
+  executeRestoreAccess: async (caseId: string, actor: ActorPayload) => {
+    const result = await request<{ status: "SENT"; command_id: string }>(`/collections/${caseId}/restore-access`, { method: "POST", body: JSON.stringify(actor) });
+    refresh();
+    return result;
+  },
+  logCollectionAction: async (caseId: string, body: { type: "SEND_REMINDER" | "CALL_ATTEMPT" | "NOTE" | "REQUEST_IMMOBILIZER"; note?: string } & ActorPayload) => {
+    const result = await request<CollectionAction>(`/collections/${caseId}/actions`, { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  getGps: () => request<{ vehicles: Vehicle[]; gpsDevices: GPSDevice[]; contracts: Array<Contract & { client?: string }>; cases: CollectionsCase[]; alerts: Alert[] }>("/gps"),
+  getDevices: () => request<{ devices: DeviceManagementRow[] }>("/devices"),
+  getDevice: (id: string) => request<DeviceDetailResponse>(`/devices/${id}`),
+  updateDevice: async (id: string, body: Pick<GPSDevice, "provider" | "provider_device_id" | "imei" | "sim_number">) => {
+    const result = await request<GPSDevice>(`/devices/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
   getAlerts: () => request<Alert[]>("/alerts"),
   acknowledgeAlert: async (alertId: string, actor: ActorPayload) => {
     const result = await request<Alert>(`/alerts/${alertId}/ack`, { method: "POST", body: JSON.stringify(actor) });
     refresh();
     return result;
   },
+  getReportingSummary: () => request<ReportingSummaryResponse>("/reporting/summary"),
+  getReportingAging: () => request<AgingRow[]>("/reporting/aging"),
+  getReportingCashflow: () => request<CashflowRow[]>("/reporting/cashflow"),
   getAudit: () => request<AuditEntry[]>("/audit")
 };
 

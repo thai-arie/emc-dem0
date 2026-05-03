@@ -1,9 +1,11 @@
-export type Role = "CEO" | "COLLECTIONS" | "OPS";
+export type Role = "ADMIN" | "CEO" | "FINANCIAL_CONTROLLER" | "COLLECTIONS" | "OPS";
 
 export interface User {
   id: string;
+  email: string;
   full_name: string;
   role: Role;
+  is_active?: boolean;
 }
 
 export interface Client {
@@ -27,6 +29,7 @@ export interface Contract {
   vehicle_price: number;
   down_payment: number;
   financed_amount: number;
+  credit_balance: number;
 }
 
 export interface Vehicle {
@@ -42,9 +45,30 @@ export interface Vehicle {
 export interface GPSDevice {
   id: string;
   vehicle_id: string;
-  status: "ONLINE" | "IMMOBILIZER_ARMED";
+  status: "ONLINE" | "OVERDUE_WATCH" | "IMMOBILIZER_ARMED";
   last_position: { lat: number; lng: number };
   last_ping_at: string;
+  provider: string;
+  provider_device_id: string;
+  imei: string;
+  sim_number: string;
+  ignition_status: "ON" | "OFF";
+  speed: number;
+  last_command: string;
+  last_command_status: string;
+  last_command_at: string | null;
+}
+
+export interface GPSCommand {
+  id: string;
+  device_id: string;
+  command_type: "IMMOBILIZE" | "RELEASE";
+  requested_by: string;
+  approved_by: string | null;
+  status: "REQUESTED" | "APPROVED" | "SENT" | "ACKNOWLEDGED" | "FAILED";
+  provider_response: string;
+  created_at: string;
+  executed_at: string | null;
 }
 
 export interface Installment {
@@ -53,7 +77,7 @@ export interface Installment {
   seq_no: number;
   due_date: string;
   amount_due: number;
-  status: "SCHEDULED" | "DUE" | "OVERDUE" | "PAID";
+  status: "SCHEDULED" | "DUE" | "OVERDUE" | "PAID" | "CANCELLED_BY_PREPAYMENT";
   paid_at: string | null;
 }
 
@@ -65,6 +89,12 @@ export interface Payment {
   method: "cash" | "transfer" | "aba" | "wing";
   reference: string;
   note: string;
+  allocation_type: "REGULAR" | "PAY_AHEAD" | "PRINCIPAL_PREPAYMENT";
+  principal_extra_amount: number;
+  applied_amount: number;
+  unapplied_amount: number;
+  credit_balance_after: number;
+  idempotency_key?: string | null;
   recorded_at: string;
   recorded_by: string;
 }
@@ -73,17 +103,21 @@ export interface CollectionsCase {
   id: string;
   contract_id: string;
   client_id: string;
-  status: "OPEN" | "SMS_SENT" | "IMMOBILIZER_ARMED" | "CURED" | "CLOSED";
+  status: "OPEN" | "APPROVED" | "CURED" | "CLOSED";
   opened_at: string;
   cured_at: string | null;
+  next_action_type: string;
+  next_action_date: string;
+  assigned_agent_id: string;
 }
 
 export interface CollectionAction {
   id: string;
   case_id: string;
-  type: "SMS" | "ARM_IMMOBILIZER";
+  type: "SMS" | "ARM_IMMOBILIZER" | "SEND_REMINDER" | "CALL_ATTEMPT" | "NOTE" | "REQUEST_IMMOBILIZER" | "APPROVE_IMMOBILIZER";
   performed_by: string;
   performed_at: string;
+  note: string;
 }
 
 export interface Alert {

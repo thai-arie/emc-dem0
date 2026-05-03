@@ -3,17 +3,20 @@
   display: grid;
   grid-template-columns: 256px minmax(0, 1fr);
   background: transparent;
+  overflow: visible;
 }
 
 .main {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: visible;
 }
 
 .content {
   padding: 26px;
   min-width: 0;
+  overflow: visible;
 }
 
 @media (max-width: 920px) {

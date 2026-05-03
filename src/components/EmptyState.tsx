@@ -1,4 +1,4 @@
-export default function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export default function EmptyState({ title = "No data available", hint }: { title?: string; hint?: string }) {
   return (
     <div className="empty">
       <h2>{title}</h2>

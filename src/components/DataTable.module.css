@@ -62,6 +62,7 @@
 
 .table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   background:
@@ -76,9 +77,10 @@
 .table th,
 .table td {
   border-bottom: 1px solid var(--color-border);
-  padding: 9px 12px;
+  padding: 10px 12px;
   text-align: left;
   vertical-align: middle;
+  min-width: 0;
 }
 
 .table th {
@@ -104,6 +106,9 @@
 
 .table td {
   color: rgba(237, 246, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table tbody tr:last-child td {

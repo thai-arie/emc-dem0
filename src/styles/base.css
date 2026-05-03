@@ -124,7 +124,7 @@ a {
 
 .screen-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 14px;
 }
 
@@ -215,6 +215,109 @@ a {
   gap: 10px;
 }
 
+.contract-create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.form-section-title {
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(126, 166, 201, 0.18);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.deal-summary-panel {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(8, 28, 48, 0.92), rgba(5, 14, 27, 0.98));
+  box-shadow: var(--shadow-soft);
+  padding: 16px;
+}
+
+.deal-summary-panel span {
+  display: block;
+  color: var(--color-muted-strong);
+  font-size: 11px;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.deal-summary-panel strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.deal-summary-panel p {
+  margin: 8px 0 0;
+  color: var(--color-accent);
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 920;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.deal-summary-panel dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.deal-summary-panel dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgba(126, 166, 201, 0.14);
+  padding-top: 8px;
+}
+
+.deal-summary-panel dt,
+.deal-summary-panel dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.deal-summary-panel dt {
+  color: var(--color-muted);
+}
+
+.deal-summary-panel dd {
+  color: var(--color-text);
+  font-weight: 800;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .contract-create-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .deal-summary-panel {
+    position: static;
+  }
+}
+
+.field-label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  font-weight: 760;
+}
+
 .form-grid input,
 .form-grid select {
   width: 100%;
@@ -230,6 +333,33 @@ a {
 .form-grid select:focus {
   border-color: var(--color-border-strong);
   box-shadow: 0 0 0 3px rgba(56, 216, 196, 0.12);
+}
+
+.form-grid input[aria-invalid="true"] {
+  border-color: rgba(255, 123, 131, 0.72);
+  box-shadow: 0 0 0 3px rgba(255, 80, 89, 0.12);
+}
+
+.form-grid input:disabled {
+  color: var(--color-muted-strong);
+  background: rgba(126, 166, 201, 0.08);
+  border-color: rgba(126, 166, 201, 0.18);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.field-error,
+.form-error {
+  color: #ff9aa1;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.form-error {
+  border: 1px solid rgba(255, 123, 131, 0.34);
+  border-radius: var(--radius);
+  background: rgba(255, 80, 89, 0.1);
+  padding: 10px 11px;
 }
 
 .tabs {
@@ -269,4 +399,73 @@ a {
 
 .empty p {
   margin: 0;
+}
+
+.command-log {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: rgba(5, 11, 22, 0.24);
+  overflow: hidden;
+}
+
+.command-log-count {
+  padding: 8px 12px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 760;
+  border-bottom: 1px solid rgba(126, 166, 201, 0.12);
+}
+
+.command-log-head,
+.command-log-row {
+  display: grid;
+  grid-template-columns: 1.25fr 1.25fr 1fr 0.95fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.command-log-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgba(12, 31, 53, 0.98), rgba(5, 11, 22, 0.98));
+  color: var(--color-muted-strong);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(95, 220, 207, 0.18);
+}
+
+.command-log-body {
+  height: min(430px, calc(100vh - 260px));
+  min-height: 260px;
+  overflow-y: auto;
+}
+
+.command-log-row {
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: rgba(237, 246, 255, 0.9);
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-log-row:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+.command-log-row:hover {
+  background: var(--color-row-hover);
+}
+
+.command-log-empty {
+  padding: 28px 12px;
+  color: var(--color-muted);
+  text-align: center;
 }

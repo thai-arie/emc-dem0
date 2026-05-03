@@ -1,16 +1,25 @@
-export const statusTaxonomy: Record<string, { label: string; tone: "green" | "red" | "amber" | "blue" | "slate" }> = {
+export const statusTaxonomy: Record<string, { label: string; tone: "green" | "red" | "orange" | "amber" | "blue" | "slate" }> = {
   ACTIVE: { label: "ACTIVE", tone: "green" },
-  OVERDUE: { label: "OVERDUE", tone: "red" },
+  OVERDUE: { label: "OVERDUE", tone: "amber" },
   SCHEDULED: { label: "SCHEDULED", tone: "slate" },
   DUE: { label: "DUE", tone: "amber" },
   PAID: { label: "PAID", tone: "green" },
+  CANCELLED_BY_PREPAYMENT: { label: "CANCELLED_BY_PREPAYMENT", tone: "slate" },
   OPEN: { label: "OPEN", tone: "amber" },
-  SMS_SENT: { label: "SMS_SENT", tone: "blue" },
+  APPROVED: { label: "APPROVED", tone: "blue" },
   IMMOBILIZER_ARMED: { label: "IMMOBILIZER_ARMED", tone: "red" },
+  RESTRICTED: { label: "RESTRICTED", tone: "red" },
+  OVERDUE_WATCH: { label: "OVERDUE", tone: "amber" },
   CURED: { label: "CURED", tone: "green" },
   CLOSED: { label: "CLOSED", tone: "slate" },
   ONLINE: { label: "ONLINE", tone: "green" },
   INFO: { label: "INFO", tone: "blue" },
   WARN: { label: "WARN", tone: "amber" },
-  CRITICAL: { label: "CRITICAL", tone: "red" }
+  WARNING: { label: "WARNING", tone: "amber" },
+  CRITICAL: { label: "CRITICAL", tone: "red" },
+  REQUESTED: { label: "REQUESTED", tone: "amber" },
+  SENT: { label: "SENT", tone: "blue" },
+  ACKNOWLEDGED: { label: "ACKNOWLEDGED", tone: "green" },
+  FAILED: { label: "FAILED", tone: "red" },
+  FAILED_RELEASE: { label: "FAILED_RELEASE", tone: "red" }
 };

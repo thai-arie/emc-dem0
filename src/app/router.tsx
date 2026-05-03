@@ -9,8 +9,10 @@ import Payments from "../screens/Payments";
 import CollectionsWorkspace from "../screens/CollectionsWorkspace";
 import CollectionsCaseDetail from "../screens/CollectionsCaseDetail";
 import Gps from "../screens/Gps";
+import Devices from "../screens/Devices";
 import Notifications from "../screens/Notifications";
 import Audit from "../screens/Audit";
+import Reporting from "../screens/Reporting";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -26,6 +28,8 @@ export const router = createBrowserRouter([
       { path: "collections", element: <CollectionsWorkspace /> },
       { path: "collections/:id", element: <CollectionsCaseDetail /> },
       { path: "gps", element: <Gps /> },
+      { path: "devices", element: <Devices /> },
+      { path: "reporting", element: <Reporting /> },
       { path: "notifications", element: <Notifications /> },
       { path: "audit", element: <Audit /> }
     ]

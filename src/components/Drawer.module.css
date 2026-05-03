@@ -3,7 +3,7 @@
   right: 0;
   top: 72px;
   bottom: 0;
-  width: 380px;
+  width: min(680px, calc(100vw - 32px));
   background:
     linear-gradient(180deg, rgba(16, 36, 61, 0.98), rgba(6, 15, 29, 0.98));
   border-left: 1px solid var(--color-border-strong);

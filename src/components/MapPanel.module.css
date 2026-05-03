@@ -1,3 +1,7 @@
+.frame {
+  position: relative;
+}
+
 .map {
   min-height: 620px;
   border: 1px solid var(--color-border);
@@ -16,4 +20,50 @@
   background: rgba(8, 20, 38, 0.92);
   color: var(--color-text);
   border-color: var(--color-border);
+}
+
+.legend {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 500;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: calc(100% - 36px);
+  padding: 10px;
+  border: 1px solid rgba(126, 166, 201, 0.3);
+  border-radius: var(--radius);
+  background: rgba(5, 11, 22, 0.84);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(14px);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 14px currentColor;
+}
+
+.markerGreen {
+  filter: drop-shadow(0 0 5px rgba(53, 214, 174, 0.42));
+}
+
+.markerYellow {
+  filter: drop-shadow(0 0 9px rgba(255, 200, 74, 0.78));
+}
+
+.markerRed {
+  filter: drop-shadow(0 0 12px rgba(255, 77, 94, 0.92));
 }

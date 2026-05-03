@@ -23,7 +23,7 @@ export default function ClientProfile() {
           <div><strong>Phone</strong><p>{data.client.phone}</p></div>
           <div><strong>Address</strong><p>{data.client.address || "-"}</p></div>
           <div><strong>National ID / passport</strong><p>{data.client.national_id || "-"}</p></div>
-          <div><strong>Emergency contact</strong><p>{data.client.emergency_contact_name || "-"} {data.client.emergency_contact_phone || ""}</p></div>
+          <div><strong>Emergency contact</strong><p>{[data.client.emergency_contact_name, data.client.emergency_contact_phone].filter(Boolean).join(" · ") || "-"}</p></div>
         </div>
       </section>
       <section className="screen-panel">

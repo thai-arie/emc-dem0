@@ -12,14 +12,18 @@ import { formatMoney } from "../lib/formatMoney";
 export default function Payments() {
   const [installmentId, setInstallmentId] = useState<string | null>(null);
   const [method, setMethod] = useState<"cash" | "transfer" | "aba" | "wing">("cash");
+  const [allocationType, setAllocationType] = useState<"" | "PAY_AHEAD" | "PRINCIPAL_PREPAYMENT">("");
   const [amount, setAmount] = useState("");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState("");
   const user = useAuth((state) => state.user);
   const toast = useUi((state) => state.addToast);
   const { data, reload } = useApiData(() => api.getInstallments());
   const overdue = (data?.installments ?? []).filter((item) => item.status === "OVERDUE");
   const selected = overdue.find((item) => item.id === installmentId);
+  const paymentAmount = selected ? Math.round(Number(amount || selected.amount_due / 100) * 100) : 0;
+  const needsAllocation = selected ? paymentAmount > selected.amount_due : false;
   return (
     <div className="screen">
       <h1 className="screen-title">Payments</h1>
@@ -35,7 +39,7 @@ export default function Payments() {
             { key: "due_date", header: "Due date", render: (row) => formatDate(row.due_date) },
             { key: "amount_due", header: "Amount", render: (row) => formatMoney(row.amount_due), sortValue: (row) => row.amount_due },
             { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
-            { key: "action", header: "Action", render: (row) => <RoleGate roles={["COLLECTIONS"]}><button className="secondary-button" onClick={(event) => { event.stopPropagation(); setInstallmentId(row.id); setAmount(String(row.amount_due / 100)); }}>Record payment</button></RoleGate> }
+            { key: "action", header: "Action", render: (row) => <RoleGate roles={["COLLECTIONS", "FINANCIAL_CONTROLLER"]}><button className="secondary-button" onClick={(event) => { event.stopPropagation(); setInstallmentId(row.id); setAmount(String(row.amount_due / 100)); setAllocationType(""); setIdempotencyKey(crypto.randomUUID()); }}>Record payment</button></RoleGate> }
           ]}
         />
       </section>
@@ -48,7 +52,10 @@ export default function Payments() {
           columns={[
             { key: "id", header: "ID" },
             { key: "contract_id", header: "Contract" },
-            { key: "amount", header: "Amount", render: (row) => formatMoney(row.amount) },
+            { key: "amount", header: "Amount", render: (row) => formatMoney(row.amount), sortValue: (row) => row.amount },
+            { key: "applied_amount", header: "Applied", render: (row) => formatMoney(row.applied_amount ?? row.amount), sortValue: (row) => row.applied_amount ?? row.amount },
+            { key: "unapplied_amount", header: "Unapplied", render: (row) => formatMoney(row.unapplied_amount ?? 0), sortValue: (row) => row.unapplied_amount ?? 0 },
+            { key: "credit_balance_after", header: "Credit after", render: (row) => formatMoney(row.credit_balance_after ?? 0), sortValue: (row) => row.credit_balance_after ?? 0 },
             { key: "method", header: "Method" },
             { key: "reference", header: "Reference" },
             { key: "recorded_by", header: "Recorded by" },
@@ -63,6 +70,13 @@ export default function Payments() {
             <div className="form-grid">
               <p>Record {formatMoney(selected.amount_due)} for {selected.contract_id}?</p>
               <input placeholder="Amount" value={amount} onChange={(event) => setAmount(event.target.value)} />
+              {needsAllocation ? (
+                <select value={allocationType} onChange={(event) => setAllocationType(event.target.value as "PAY_AHEAD" | "PRINCIPAL_PREPAYMENT")}>
+                  <option value="">Select allocation type</option>
+                  <option value="PAY_AHEAD">PAY_AHEAD</option>
+                  <option value="PRINCIPAL_PREPAYMENT">PRINCIPAL_PREPAYMENT</option>
+                </select>
+              ) : null}
               <select value={method} onChange={(event) => setMethod(event.target.value as "cash" | "transfer" | "aba" | "wing")}>
                 <option value="cash">cash</option>
                 <option value="transfer">bank transfer</option>
@@ -74,11 +88,21 @@ export default function Payments() {
             </div>
           }
           confirmLabel="Record payment"
-          onCancel={() => setInstallmentId(null)}
+          onCancel={() => {
+            setInstallmentId(null);
+            setAllocationType("");
+            setIdempotencyKey("");
+          }}
           onConfirm={() => {
-            api.recordPayment({ installment_id: selected.id, amount: Math.round(Number(amount || selected.amount_due / 100) * 100), method, reference, note, ...actorFromUser(user) }).then(() => {
+            if (needsAllocation && !allocationType) {
+              toast("Select allocation type");
+              return;
+            }
+            api.recordPayment({ installment_id: selected.id, amount: paymentAmount, method, reference, note, allocation_type: needsAllocation ? allocationType as "PAY_AHEAD" | "PRINCIPAL_PREPAYMENT" : undefined, idempotency_key: idempotencyKey, ...actorFromUser(user) }).then(() => {
               toast("Payment recorded");
               setInstallmentId(null);
+              setAllocationType("");
+              setIdempotencyKey("");
               setReference("");
               setNote("");
               reload();

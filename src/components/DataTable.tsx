@@ -27,6 +27,11 @@ interface DataTableProps<T> {
   exportCSV?: string;
 }
 
+function displayValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
 export default function DataTable<T>({ rows, columns, rowKey, onRowClick, searchKey, filters, exportCSV }: DataTableProps<T>) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string>("all");
@@ -89,14 +94,16 @@ export default function DataTable<T>({ rows, columns, rowKey, onRowClick, search
             {filtered.map((row) => (
               <tr key={rowKey(row)} className={onRowClick ? styles.clickable : ""} onClick={() => onRowClick?.(row)}>
                 {columns.map((column) => (
-                  <td key={String(column.key)}>{column.render ? column.render(row) : String((row as Record<string, unknown>)[String(column.key)] ?? "")}</td>
+                  <td key={String(column.key)} title={displayValue((row as Record<string, unknown>)[String(column.key)])}>
+                    {column.render ? column.render(row) : displayValue((row as Record<string, unknown>)[String(column.key)])}
+                  </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
-        <EmptyState title="No rows" hint="No records match the current table state." />
+        <EmptyState title="No data available" />
       )}
     </div>
   );
