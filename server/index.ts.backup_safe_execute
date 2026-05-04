@@ -1231,19 +1231,6 @@ app.post("/collections/:id/immobilize", (req, res) => {
   if (!kase) return res.status(404).json({ error: "Case not found" });
   if (kase.status !== "APPROVED") return res.status(409).json({ error: "Immobilizer approval required" });
   const { contract, vehicle, gps } = gpsForCase(kase);
-
-  const overdueLeft = row<any>(
-    "SELECT * FROM installments WHERE contract_id = ? AND status = 'OVERDUE' LIMIT 1",
-    [contract.id]
-  );
-  if (!overdueLeft || contract.status !== "OVERDUE") {
-    audit(a.actor_id, a.actor_role, "case", kase.id, "collections.arm_immobilizer_blocked_cured", kase, {
-      reason: "Contract is no longer overdue at execution time",
-      contract_status: contract.status
-    });
-    return res.status(409).json({ error: "Contract is no longer overdue. Immobilization blocked." });
-  }
-
   if (!gps || gps.status !== "ONLINE") return res.status(409).json({ error: "Invalid GPS transition" });
   const at = nowIso();
   let sentCommandId = "";
