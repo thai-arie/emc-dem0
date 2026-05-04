@@ -289,7 +289,7 @@ const [navBlocked, setNavBlocked] = useState(false);
           <p className="screen-muted">{kase.contract_id} · {kase.client}</p>
         </div>
         <StatusBadge status={kase.status} />
-      <button className="secondary-button" style={{ marginLeft: 12 }} onClick={() => { window.location.href = `/contracts/${kase.contract_id}`; }}>Open contract</button>
+      <button className="secondary-button" style={{ marginLeft: 12 }} onClick={() => { window.location.href = `/contracts/${kase.contract_id}`; }}>Client Profile</button>
       </div>
 
       

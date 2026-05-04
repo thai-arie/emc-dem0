@@ -80,10 +80,10 @@ export default function ContractDetail() {
             <div><strong>Financed amount</strong><p>{formatMoney(data.contract.financed_amount)}</p></div>
             <div><strong>Monthly payment</strong><p>{formatMoney(data.contract.monthly_total)}</p></div>
             <div><strong>Term</strong><p>{data.contract.term_months} months</p></div>
-            <div><strong>Outstanding balance</strong><p>{formatMoney(data.financials.outstanding_balance)}</p></div>
+            <div><strong>Remaining principal</strong><p>{formatMoney(data.financials.outstanding_balance)}</p></div>
             <div><strong>Paid to date</strong><p>{formatMoney(data.financials.paid_to_date)}</p></div>
             <div><strong>Overdue amount</strong><p>{formatMoney(data.financials.overdue_amount)}</p></div>
-            <div><strong>Customer credit balance</strong><p>{formatMoney(data.financials.credit_balance)}</p></div>
+            <div><strong>Outstanding balance</strong><p>{formatMoney(data.financials.credit_balance)}</p></div>
           </div>
         </div>
       ) : tab === "Schedule" ? (
