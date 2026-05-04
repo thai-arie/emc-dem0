@@ -1140,6 +1140,27 @@ app.get("/collections", (_req, res) => {
   res.json({ cases: casesWithDecision, actions });
 });
 
+
+app.get("/collections/:id/gps-commands", (req, res) => {
+  const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
+  if (!kase) return res.status(404).json({ error: "Case not found" });
+
+  const { gps } = gpsForCase(kase);
+  if (!gps) return res.json([]);
+
+  const commands = rows<any>(
+    `
+    SELECT *
+    FROM gps_commands
+    WHERE device_id = ?
+    ORDER BY created_at DESC
+    `,
+    [gps.id]
+  );
+
+  res.json(commands);
+});
+
 app.post("/collections/:id/sms", (req, res) => {
   const a = actor(req);
   if (!requirePermission(req, res, "gps.arm")) return;

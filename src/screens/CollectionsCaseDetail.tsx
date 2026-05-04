@@ -19,6 +19,8 @@ export default function CollectionsCaseDetail() {
   const role = user?.role;
   const toast = useUi((state) => state.addToast);
   const { data, reload } = useApiData(api.getCollections);
+  const { data: gpsCommands } = useApiData(() => api.getGpsCommands(id!), [id]);
+
   const kase = data?.cases.find((item) => item.id === id);
   const actions = (data?.actions ?? []).filter((item) => item.case_id === id);
 
@@ -141,7 +143,41 @@ export default function CollectionsCaseDetail() {
             { key: "performed_by", header: "User" }
           ]}
         />
+      
+      <section className="screen-panel">
+        <h2>GPS Command History</h2>
+        {!gpsCommands || gpsCommands.length === 0 ? (
+          <p>No GPS commands yet</p>
+        ) : (
+          <DataTable
+            rows={gpsCommands}
+            rowKey={(row) => row.id}
+            columns={[
+              { key: "command_type", header: "Command" },
+              {
+  key: "status",
+  header: "Status",
+  render: (row) => {
+    if (row.provider_response && row.provider_response.toLowerCase().includes("fail")) {
+      return "FAILED";
+    }
+    if (row.status === "SENT" && row.provider_response) {
+      return "ACKNOWLEDGED";
+    }
+    return row.status;
+  }
+},
+              { key: "provider_response", header: "Provider Message" },
+              { key: "requested_by", header: "Requested by" },
+              { key: "approved_by", header: "Approved by" },
+              { key: "created_at", header: "Created", render: (row) => formatDate(row.created_at) },
+              { key: "executed_at", header: "Executed", render: (row) => row.executed_at ? formatDate(row.executed_at) : "—" }
+            ]}
+          />
+        )}
       </section>
+
+</section>
     </div>
   );
 }
