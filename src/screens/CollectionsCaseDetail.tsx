@@ -9,6 +9,7 @@ import { useAuth } from "../store/auth";
 import { useUi } from "../store/ui";
 import { formatDate } from "../lib/formatDate";
 import { formatMoney } from "../lib/formatMoney";
+import GpsCommandOverlay from "../components/gps/GpsCommandOverlay";
 
 type LogActionType = "NOTE" | "CALL_ATTEMPT" | "SEND_REMINDER" | "REQUEST_IMMOBILIZER";
 
@@ -27,6 +28,15 @@ const [navBlocked, setNavBlocked] = useState(false);
     ? [...gpsCommands].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
     : null;
   const isGpsPending = !!latestCommand && latestCommand.status === "SENT";
+
+  const sentAtMs = latestCommand?.created_at
+    ? new Date(latestCommand.created_at).getTime()
+    : null;
+
+  const commandAgeMs = sentAtMs ? Date.now() - sentAtMs : 0;
+  const isSlaWarning = isGpsPending && commandAgeMs >= 30000;
+  const isSlaTimeout = isGpsPending && commandAgeMs >= 60000;
+
 
   useEffect(() => {
     if (!isGpsPending) return;
@@ -145,6 +155,24 @@ const [navBlocked, setNavBlocked] = useState(false);
 
   return (
     <div className="screen">
+
+      
+      {isGpsPending && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9998,
+          background: "transparent",
+          pointerEvents: "all",
+          cursor: "not-allowed"
+        }} />
+      )}
+
+      <GpsCommandOverlay
+        visible={isGpsPending}
+        isWarning={isSlaWarning}
+        isTimeout={isSlaTimeout}
+      />
       
       {confirmAction && (
         <div style={{
