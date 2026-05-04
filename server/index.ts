@@ -379,6 +379,14 @@ function reconcileGpsStatusFromCommands() {
   tx();
 }
 
+
+function activeGpsCommand(deviceId: string) {
+  return row<any>(
+    "SELECT * FROM gps_commands WHERE device_id = ? AND status IN ('REQUESTED', 'SENT') ORDER BY created_at DESC LIMIT 1",
+    [deviceId]
+  );
+}
+
 function simulateMockGpsProvider(commandId: string, gps: any, vehicle: any, a: Actor, shouldFail = false) {
   setTimeout(() => {
     const command = row<any>("SELECT * FROM gps_commands WHERE id = ?", [commandId]);
@@ -1275,6 +1283,11 @@ app.post("/collections/:id/immobilize", (req, res) => {
   if (kase.status !== "APPROVED") return res.status(409).json({ error: "Immobilizer approval required" });
   const { contract, vehicle, gps } = gpsForCase(kase);
 
+  const active = activeGpsCommand(gps.id);
+  if (active) {
+    return res.status(409).json({ error: "Another GPS command is still in progress" });
+  }
+
   const overdueLeft = row<any>(
     "SELECT * FROM installments WHERE contract_id = ? AND status = 'OVERDUE' LIMIT 1",
     [contract.id]
@@ -1454,6 +1467,11 @@ app.post("/gps-commands/:id/retry", (req, res) => {
   const command = row<any>("SELECT * FROM gps_commands WHERE id = ?", [req.params.id]);
   if (!command) return res.status(404).json({ error: "Command not found" });
   if (command.status !== "FAILED") return res.status(409).json({ error: "Only FAILED commands can be retried" });
+
+  const active = activeGpsCommand(command.device_id);
+  if (active) {
+    return res.status(409).json({ error: "Another GPS command is still in progress" });
+  }
 
   const at = nowIso();
   const newId = nextId("CMD");

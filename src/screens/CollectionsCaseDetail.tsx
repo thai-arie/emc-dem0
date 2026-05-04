@@ -16,15 +16,26 @@ export default function CollectionsCaseDetail() {
   const { id } = useParams();
   const [note, setNote] = useState("");
 const [navBlocked, setNavBlocked] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"IMMOBILIZE" | "RESTORE" | null>(null);
+  const [confirmContractId, setConfirmContractId] = useState("");
   const user = useAuth((state) => state.user);
   const role = user?.role;
   const toast = useUi((state) => state.addToast);
   const { data, reload } = useApiData(api.getCollections);
-  const { data: gpsCommands } = useApiData(() => api.getGpsCommands(id!), [id]);
+  const { data: gpsCommands, reload: reloadGpsCommands } = useApiData(() => api.getGpsCommands(id!), [id]);
   const latestCommand = gpsCommands && gpsCommands.length > 0
     ? [...gpsCommands].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
     : null;
-  const isGpsPending = !!latestCommand && (latestCommand.status === "SENT" || latestCommand.status === "REQUESTED");
+  const isGpsPending = !!latestCommand && latestCommand.status === "SENT";
+
+  useEffect(() => {
+    if (!isGpsPending) return;
+    const timer = window.setInterval(() => {
+      reloadGpsCommands();
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [isGpsPending, reloadGpsCommands]);
+
 
   useEffect(() => {
     const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
@@ -82,17 +93,8 @@ const [navBlocked, setNavBlocked] = useState(false);
 
   const executeImmobilizer = () => {
     if (!kase) return;
-
-    const typed = window.prompt(`Type contract ID to confirm immobilization: ${kase.contract_id}`);
-    if (typed !== kase.contract_id) {
-      toast("Immobilizer execution cancelled");
-      return;
-    }
-
-    api.immobilize(kase.id, actorFromUser(user)).then(() => {
-      toast("Immobilizer armed");
-      reload();
-    });
+    setConfirmContractId("");
+    setConfirmAction("IMMOBILIZE");
   };
 
   const approveRestoreAccess = () => {
@@ -105,16 +107,36 @@ const [navBlocked, setNavBlocked] = useState(false);
 
   const executeRestoreAccess = () => {
     if (!kase) return;
+    setConfirmContractId("");
+    setConfirmAction("RESTORE");
+  };
 
-    const typed = window.prompt(`Type contract ID to confirm restore: ${kase.contract_id}`);
-    if (typed !== kase.contract_id) {
-      toast("Restore execution cancelled");
+  const confirmGpsAction = () => {
+    if (!kase || !confirmAction) return;
+
+    if (confirmContractId !== kase.contract_id) {
+      toast("Contract ID does not match");
+      return;
+    }
+
+    const done = () => {
+      setConfirmAction(null);
+      setConfirmContractId("");
+      reload();
+      window.dispatchEvent(new Event("emc:data"));
+    };
+
+    if (confirmAction === "IMMOBILIZE") {
+      api.immobilize(kase.id, actorFromUser(user)).then(() => {
+        toast("Immobilizer command sent");
+        done();
+      });
       return;
     }
 
     api.executeRestoreAccess(kase.id, actorFromUser(user)).then(() => {
       toast("Restore command sent");
-      reload();
+      done();
     });
   };
 
@@ -123,7 +145,79 @@ const [navBlocked, setNavBlocked] = useState(false);
 
   return (
     <div className="screen">
-      <div className="screen-header">
+      
+      {confirmAction && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9999,
+          background: "rgba(0, 0, 0, 0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px"
+        }}>
+          <div style={{
+            width: "min(560px, 100%)",
+            background: "#ffffff",
+            color: "#111827",
+            border: "1px solid #e5e7eb",
+            borderRadius: "18px",
+            padding: "24px",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.28)"
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: "8px" }}>
+              {confirmAction === "IMMOBILIZE" ? "Confirm immobilizer execution" : "Confirm restore execution"}
+            </h2>
+            <p style={{ color: "#4b5563", lineHeight: 1.5, marginBottom: "16px" }}>
+              Type the contract ID exactly to confirm this GPS command.
+            </p>
+            <div style={{
+              background: "#f9fafb",
+              border: "1px solid #e5e7eb",
+              borderRadius: "12px",
+              padding: "12px",
+              marginBottom: "16px"
+            }}>
+              <strong>Contract ID:</strong> {kase.contract_id}
+            </div>
+            <input
+              autoFocus
+              placeholder={kase.contract_id}
+              value={confirmContractId}
+              onChange={(event) => setConfirmContractId(event.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: "10px",
+                border: "1px solid #d1d5db",
+                marginBottom: "18px",
+                fontSize: "16px"
+              }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setConfirmAction(null);
+                  setConfirmContractId("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={confirmContractId !== kase.contract_id}
+                onClick={confirmGpsAction}
+              >
+                {confirmAction === "IMMOBILIZE" ? "Confirm immobilize" : "Confirm restore"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+<div className="screen-header">
       {navBlocked && (
         <div style={{
           position: "fixed",
@@ -199,11 +293,11 @@ const [navBlocked, setNavBlocked] = useState(false);
         <section className="screen-panel">
           <h2>Actions</h2>
           <div className="form-grid">
-            <input placeholder="Optional text" value={note} onChange={(event) => setNote(event.target.value)} />
+            <input placeholder="Optional text" value={note} disabled={isGpsPending} onChange={(event) => setNote(event.target.value)} />
             <div className="button-row">
-              <button className="secondary-button" onClick={() => logAction("NOTE")}>Add note</button>
-              <button className="secondary-button" onClick={() => logAction("CALL_ATTEMPT")}>Log call</button>
-              <button className="secondary-button" onClick={() => logAction("SEND_REMINDER")}>Send reminder</button>
+              <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("NOTE")}>Add note</button>
+              <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("CALL_ATTEMPT")}>Log call</button>
+              <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("SEND_REMINDER")}>Send reminder</button>
               <button className="secondary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" || kase.gps_status === "IMMOBILIZER_ARMED" || isGpsPending} onClick={() => logAction("REQUEST_IMMOBILIZER")}>Request immobilizer</button>
               <button className="primary-button" disabled={kase.status !== "APPROVED" || isGpsPending} onClick={executeImmobilizer}>Execute immobilizer</button>
               <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.restore_command_status !== "APPROVED" || isGpsPending} onClick={executeRestoreAccess}>Execute restore</button>
