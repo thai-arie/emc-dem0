@@ -210,6 +210,9 @@ export const api = {
   },
   getCollections: () => request<{ cases: CollectionsCaseRow[]; actions: CollectionAction[] }>("/collections"),
   getGpsCommands: (caseId: string) => request<GPSCommand[]>(`/collections/${caseId}/gps-commands`),
+  retryGpsCommand: (commandId: string) =>
+    request<{ status: string; command_id: string }>(`/gps-commands/${commandId}/retry`, { method: "POST" }),
+
 
   sendSms: async (caseId: string, actor: ActorPayload) => {
     const result = await request<CollectionsCase>(`/collections/${caseId}/sms`, { method: "POST", body: JSON.stringify(actor) });

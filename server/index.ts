@@ -386,8 +386,26 @@ function simulateMockGpsProvider(commandId: string, gps: any, vehicle: any, a: A
     if (!command || !currentGps || command.status !== "SENT") return;
     const at = nowIso();
     if (shouldFail) {
-      db.prepare("UPDATE gps_commands SET status = 'FAILED', provider_response = ? WHERE id = ?").run("Mock provider failed command", command.id);
-      db.prepare("UPDATE gps_devices SET last_command_status = 'FAILED', last_command_at = ? WHERE id = ?").run(at, gps.id);
+      db.transaction(() => {
+        db.prepare("UPDATE gps_commands SET status = 'FAILED', provider_response = ? WHERE id = ?").run("Mock provider failed command", command.id);
+        db.prepare("UPDATE gps_devices SET last_command_status = 'FAILED', last_command_at = ? WHERE id = ?").run(at, gps.id);
+        db.prepare(
+          "INSERT INTO alerts (id, severity, source, entity_type, entity_id, title, message, created_at, acknowledged_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).run(
+          nextId("ALT"),
+          "CRITICAL",
+          "GPS",
+          "vehicle",
+          vehicle.id,
+          "GPS command failed",
+          `${command.command_type} command failed for GPS device ${gps.id}`,
+          at,
+          null,
+          null
+        );
+        audit(a.actor_id, a.actor_role, "vehicle", vehicle.id, "gps.command_failed", jsonGps(currentGps), { ...jsonGps(currentGps), last_command_status: "FAILED", last_command_at: at, failed_command_id: command.id });
+      })();
+      syncDerivedAlerts();
       return;
     }
     const nextGpsStatus = command.command_type === "RELEASE" ? "ONLINE" : "IMMOBILIZER_ARMED";
@@ -1425,6 +1443,53 @@ app.patch("/devices/:id", (req, res) => {
   res.json(jsonGps(row<any>("SELECT * FROM gps_devices WHERE id = ?", [device.id])));
 });
 
+
+app.post("/gps-commands/:id/retry", (req, res) => {
+  const a = actor(req);
+
+  const command = row<any>("SELECT * FROM gps_commands WHERE id = ?", [req.params.id]);
+  if (!command) return res.status(404).json({ error: "Command not found" });
+  if (command.status !== "FAILED") return res.status(409).json({ error: "Only FAILED commands can be retried" });
+
+  const at = nowIso();
+  const newId = nextId("CMD");
+
+  db.transaction(() => {
+    db.prepare(
+      "INSERT INTO gps_commands (id, device_id, command_type, requested_by, approved_by, status, provider_response, created_at, executed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(
+      newId,
+      command.device_id,
+      command.command_type,
+      a.actor_id,
+      null,
+      "SENT",
+      "",
+      at,
+      at
+    );
+
+    db.prepare("UPDATE gps_devices SET last_command = ?, last_command_status = 'SENT', last_command_at = ? WHERE id = ?")
+      .run(command.command_type, at, command.device_id);
+
+    audit(a.actor_id, a.actor_role, "vehicle", command.device_id, "gps.command_retry_requested", command, {
+      retried_from_command_id: command.id,
+      new_command_id: newId,
+      command_type: command.command_type,
+      status: "SENT"
+    });
+  })();
+
+  
+  const gps = row<any>("SELECT * FROM gps_devices WHERE id = ?", [command.device_id]);
+  const vehicle = row<any>("SELECT * FROM vehicles WHERE id = ?", [gps.vehicle_id]);
+
+  simulateMockGpsProvider(newId, gps, vehicle, a, req.body?.mock_provider_result === "FAILED");
+
+  res.json({ status: "SENT", command_id: newId });
+
+});
+
 app.get("/alerts", (_req, res) => {
   refreshOverdueState();
   reconcileGpsStatusFromCommands();
@@ -1462,6 +1527,58 @@ app.post("/alerts/:id/ack", (req, res) => {
 app.get("/audit", (_req, res) => {
   res.json(rows<any>("SELECT id, ts, actor_id, actor_role, entity_type, entity_id, action, before_json, after_json FROM audit ORDER BY ts").map((item) => ({ ...item, before: item.before_json ? JSON.parse(item.before_json) : null, after: item.after_json ? JSON.parse(item.after_json) : null })));
 });
+
+
+const REQUESTED_TIMEOUT_MS = 30 * 1000;
+const SENT_TIMEOUT_MS = 120 * 1000;
+
+function gpsCommandTimeoutWatcher() {
+  const at = nowIso();
+  const pendingCommands = rows<any>(
+    "SELECT * FROM gps_commands WHERE status IN ('REQUESTED', 'SENT')"
+  );
+
+  for (const command of pendingCommands) {
+    const createdAt = new Date(command.created_at).getTime();
+    if (!createdAt) continue;
+
+    const ageMs = Date.now() - createdAt;
+    const timedOut =
+      (command.status === "REQUESTED" && ageMs > REQUESTED_TIMEOUT_MS) ||
+      (command.status === "SENT" && ageMs > SENT_TIMEOUT_MS);
+
+    if (!timedOut) continue;
+
+    const gps = row<any>("SELECT * FROM gps_devices WHERE id = ?", [command.device_id]);
+    const vehicleId = gps?.vehicle_id ?? command.device_id;
+
+    db.transaction(() => {
+      db.prepare("UPDATE gps_commands SET status = 'FAILED', provider_response = ? WHERE id = ?")
+        .run("GPS command timed out before provider acknowledgement", command.id);
+
+      db.prepare("UPDATE gps_devices SET last_command_status = 'FAILED', last_command_at = ? WHERE id = ?")
+        .run(at, command.device_id);
+
+      db.prepare(
+        "INSERT INTO alerts (id, severity, source, entity_type, entity_id, title, message, created_at, acknowledged_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(
+        nextId("ALT"),
+        "CRITICAL",
+        "GPS",
+        "vehicle",
+        vehicleId,
+        "GPS command timeout",
+        `${command.command_type} command timed out for GPS device ${command.device_id}`,
+        at,
+        null,
+        null
+      );
+    })();
+  }
+}
+
+setInterval(gpsCommandTimeoutWatcher, 5000);
+
 
 const server = app.listen(4000, "127.0.0.1", () => {
   console.log("EMC API listening on http://127.0.0.1:4000");

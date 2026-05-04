@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import DataTable from "../components/DataTable";
 import RoleGate from "../app/layout/RoleGate";
@@ -15,11 +15,50 @@ type LogActionType = "NOTE" | "CALL_ATTEMPT" | "SEND_REMINDER" | "REQUEST_IMMOBI
 export default function CollectionsCaseDetail() {
   const { id } = useParams();
   const [note, setNote] = useState("");
+const [navBlocked, setNavBlocked] = useState(false);
   const user = useAuth((state) => state.user);
   const role = user?.role;
   const toast = useUi((state) => state.addToast);
   const { data, reload } = useApiData(api.getCollections);
   const { data: gpsCommands } = useApiData(() => api.getGpsCommands(id!), [id]);
+  const latestCommand = gpsCommands && gpsCommands.length > 0
+    ? [...gpsCommands].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+    : null;
+  const isGpsPending = !!latestCommand && (latestCommand.status === "SENT" || latestCommand.status === "REQUESTED");
+
+  useEffect(() => {
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+      if (!isGpsPending) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    const clickHandler = (e: MouseEvent) => {
+      if (!isGpsPending) return;
+
+      const target = e.target as HTMLElement | null;
+      const link = target?.closest("a");
+
+      if (!link) return;
+
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("http") || href.startsWith("mailto:")) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      setNavBlocked(true);
+    };
+
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+    document.addEventListener("click", clickHandler, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
+      document.removeEventListener("click", clickHandler, true);
+    };
+  }, [isGpsPending]);
+
 
   const kase = data?.cases.find((item) => item.id === id);
   const actions = (data?.actions ?? []).filter((item) => item.case_id === id);
@@ -85,6 +124,44 @@ export default function CollectionsCaseDetail() {
   return (
     <div className="screen">
       <div className="screen-header">
+      {navBlocked && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9999,
+          background: "rgba(0, 0, 0, 0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px"
+        }}>
+          <div style={{
+            width: "min(560px, 100%)",
+            background: "#7f1d1d",
+            color: "#fee2e2",
+            border: "1px solid #ef4444",
+            borderRadius: "16px",
+            padding: "24px",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.45)"
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: "12px" }}>
+              GPS command still in progress
+            </h2>
+            <p style={{ marginBottom: "20px", lineHeight: 1.5 }}>
+              You cannot leave this case until the GPS command is ACKNOWLEDGED or FAILED.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                className="secondary-button"
+                onClick={() => setNavBlocked(false)}
+              >
+                Stay on page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         <div>
           <h1 className="screen-title">{kase.id}</h1>
           <p className="screen-muted">{kase.contract_id} · {kase.client}</p>
@@ -92,7 +169,20 @@ export default function CollectionsCaseDetail() {
         <StatusBadge status={kase.status} />
       </div>
 
-      <section className="screen-panel">
+      
+      {isGpsPending && (
+        <div style={{
+          background: "#332200",
+          color: "#ffcc66",
+          padding: "12px",
+          borderRadius: "8px",
+          marginBottom: "12px"
+        }}>
+          GPS command in progress. Wait for confirmation before leaving this case.
+        </div>
+      )}
+
+<section className="screen-panel">
         <h2>Case detail</h2>
           <div className="screen-grid">
           <div><strong>Contract</strong><p>{kase.contract_id}</p></div>
@@ -114,9 +204,9 @@ export default function CollectionsCaseDetail() {
               <button className="secondary-button" onClick={() => logAction("NOTE")}>Add note</button>
               <button className="secondary-button" onClick={() => logAction("CALL_ATTEMPT")}>Log call</button>
               <button className="secondary-button" onClick={() => logAction("SEND_REMINDER")}>Send reminder</button>
-              <button className="secondary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" || kase.gps_status === "IMMOBILIZER_ARMED"} onClick={() => logAction("REQUEST_IMMOBILIZER")}>Request immobilizer</button>
-              <button className="primary-button" disabled={kase.status !== "APPROVED"} onClick={executeImmobilizer}>Execute immobilizer</button>
-              <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.restore_command_status !== "APPROVED"} onClick={executeRestoreAccess}>Execute restore</button>
+              <button className="secondary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" || kase.gps_status === "IMMOBILIZER_ARMED" || isGpsPending} onClick={() => logAction("REQUEST_IMMOBILIZER")}>Request immobilizer</button>
+              <button className="primary-button" disabled={kase.status !== "APPROVED" || isGpsPending} onClick={executeImmobilizer}>Execute immobilizer</button>
+              <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.restore_command_status !== "APPROVED" || isGpsPending} onClick={executeRestoreAccess}>Execute restore</button>
             </div>
           </div>
         </section>
@@ -126,8 +216,8 @@ export default function CollectionsCaseDetail() {
         <section className="screen-panel">
           <h2>Controller approval</h2>
           <div className="button-row">
-            <button className="primary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) !== "APPROVE_IMMOBILIZER"} onClick={approveImmobilizer}>Approve immobilizer</button>
-            <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.overdue_amount > 0 || kase.restore_command_status === "APPROVED"} onClick={approveRestoreAccess}>Approve restore</button>
+            <button className="primary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) !== "APPROVE_IMMOBILIZER" || isGpsPending} onClick={approveImmobilizer}>Approve immobilizer</button>
+            <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.overdue_amount > 0 || kase.restore_command_status === "APPROVED" || isGpsPending} onClick={approveRestoreAccess}>Approve restore</button>
           </div>
         </section>
       </RoleGate>
@@ -146,6 +236,18 @@ export default function CollectionsCaseDetail() {
       
       <section className="screen-panel">
         <h2>GPS Command History</h2>
+        {isGpsPending && (
+          <div style={{
+            background: "#332200",
+            color: "#ffcc66",
+            padding: "12px",
+            borderRadius: "8px",
+            marginBottom: "12px",
+            border: "1px solid #ffcc66"
+          }}>
+            GPS command in progress. Do not leave this case until the command is ACKNOWLEDGED or FAILED.
+          </div>
+        )}
         {!gpsCommands || gpsCommands.length === 0 ? (
           <p>No GPS commands yet</p>
         ) : (
@@ -171,7 +273,26 @@ export default function CollectionsCaseDetail() {
               { key: "requested_by", header: "Requested by" },
               { key: "approved_by", header: "Approved by" },
               { key: "created_at", header: "Created", render: (row) => formatDate(row.created_at) },
-              { key: "executed_at", header: "Executed", render: (row) => row.executed_at ? formatDate(row.executed_at) : "—" }
+              { key: "executed_at", header: "Executed", render: (row) => row.executed_at ? formatDate(row.executed_at) : "—" },
+              {
+                key: "actions",
+                header: "",
+                render: (row) => {
+                  if (row.status !== "FAILED") return null;
+                  return (
+                    <button
+                      className="secondary-button"
+                      onClick={() => {
+                        api.retryGpsCommand(row.id).then(() => {
+                          window.dispatchEvent(new Event("emc:data"));
+                        });
+                      }}
+                    >
+                      Retry
+                    </button>
+                  );
+                }
+              }
             ]}
           />
         )}
