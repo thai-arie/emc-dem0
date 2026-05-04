@@ -1124,7 +1124,18 @@ app.get("/collections", (_req, res) => {
     `SELECT
       cc.*,
       cl.full_name AS client,
+      cl.full_name AS client_name,
+      cl.phone AS client_phone,
+      cl.address AS client_address,
+      cl.national_id AS client_national_id,
       c.status AS contract_status,
+      c.monthly_total,
+      c.vehicle_price,
+      c.down_payment,
+      c.financed_amount,
+      c.credit_balance,
+      v.plate,
+      v.vin,
       COALESCE((SELECT SUM(amount_due) FROM installments WHERE contract_id = cc.contract_id AND status = 'OVERDUE'), 0) AS overdue_amount,
       COALESCE(
         CAST(julianday('now', 'localtime') - julianday((SELECT MIN(due_date) FROM installments WHERE contract_id = cc.contract_id AND status = 'OVERDUE')) AS INTEGER),
@@ -1385,7 +1396,33 @@ app.get("/gps", (_req, res) => {
     vehicles: rows<any>("SELECT * FROM vehicles ORDER BY id"),
     gpsDevices: rows<any>("SELECT * FROM gps_devices ORDER BY id").map(jsonGps),
     contracts: rows<any>("SELECT c.*, cl.full_name AS client FROM contracts c JOIN clients cl ON cl.id = c.client_id ORDER BY c.id"),
-    cases: rows<any>("SELECT * FROM collections_cases ORDER BY opened_at DESC"),
+    
+cases: rows<any>(`
+  SELECT 
+    cc.*,
+
+    c.full_name AS client_name,
+    c.phone AS client_phone,
+    c.address AS client_address,
+    c.national_id AS client_national_id,
+
+    ctr.monthly_total,
+    ctr.vehicle_price,
+    ctr.down_payment,
+    ctr.financed_amount,
+    ctr.credit_balance,
+
+    v.plate,
+    v.vin
+
+  FROM collections_cases cc
+  LEFT JOIN clients c ON cc.client_id = c.id
+  LEFT JOIN contracts ctr ON cc.contract_id = ctr.id
+  LEFT JOIN vehicles v ON ctr.id = v.contract_id
+
+  ORDER BY cc.opened_at DESC
+`)
+,
     alerts: syncDerivedAlerts()
   });
 });

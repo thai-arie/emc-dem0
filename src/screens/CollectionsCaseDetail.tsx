@@ -289,6 +289,7 @@ const [navBlocked, setNavBlocked] = useState(false);
           <p className="screen-muted">{kase.contract_id} · {kase.client}</p>
         </div>
         <StatusBadge status={kase.status} />
+      <button className="secondary-button" style={{ marginLeft: 12 }} onClick={() => { window.location.href = `/contracts/${kase.contract_id}`; }}>Open contract</button>
       </div>
 
       
@@ -304,7 +305,7 @@ const [navBlocked, setNavBlocked] = useState(false);
         </div>
       )}
 
-<section className="screen-panel">
+      <section className="screen-panel">
         <h2>Case detail</h2>
           <div className="screen-grid">
           <div><strong>Contract</strong><p>{kase.contract_id}</p></div>
@@ -355,7 +356,8 @@ const [navBlocked, setNavBlocked] = useState(false);
             { key: "performed_by", header: "User" }
           ]}
         />
-      
+      </section>
+
       <section className="screen-panel">
         <h2>GPS Command History</h2>
         {isGpsPending && (
@@ -420,7 +422,6 @@ const [navBlocked, setNavBlocked] = useState(false);
         )}
       </section>
 
-</section>
     </div>
   );
 }

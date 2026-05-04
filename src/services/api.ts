@@ -119,6 +119,20 @@ export interface CashflowRow {
 
 export type CollectionsCaseRow = CollectionsCase & {
   client: string;
+  client_name?: string;
+  client_phone?: string;
+  client_address?: string;
+  client_national_id?: string;
+
+  monthly_total?: number;
+  vehicle_price?: number;
+  down_payment?: number;
+  financed_amount?: number;
+  credit_balance?: number;
+
+  plate?: string;
+  vin?: string;
+
   contract_status: Contract["status"];
   dpd: number;
   overdue_amount: number;

@@ -17,11 +17,11 @@ INSERT OR REPLACE INTO contracts (
   id, client_id, vehicle_id, status, monthly_total, start_date, term_months,
   vehicle_price, down_payment, financed_amount, credit_balance
 ) VALUES
-('KT-TST-001', 'CL-TST-001', 'VH-TST-001', 'OVERDUE', 180, '2026-01-01', 36, 7000, 1000, 6000, 5800),
-('KT-TST-002', 'CL-TST-002', 'VH-TST-002', 'OVERDUE', 180, '2026-01-01', 36, 7000, 1000, 6000, 5700),
-('KT-TST-003', 'CL-TST-003', 'VH-TST-003', 'OVERDUE', 180, '2026-01-01', 36, 7000, 1000, 6000, 5600),
-('KT-TST-004', 'CL-TST-004', 'VH-TST-004', 'OVERDUE', 180, '2026-01-01', 36, 7000, 1000, 6000, 5500),
-('KT-TST-005', 'CL-TST-005', 'VH-TST-005', 'OVERDUE', 180, '2026-01-01', 36, 7000, 1000, 6000, 5400);
+('KT-TST-001', 'CL-TST-001', 'VH-TST-001', 'OVERDUE', 24000, '2026-01-01', 36, 720000, 120000, 600000, 565000),
+('KT-TST-002', 'CL-TST-002', 'VH-TST-002', 'OVERDUE', 28500, '2026-01-01', 36, 850000, 150000, 700000, 655000),
+('KT-TST-003', 'CL-TST-003', 'VH-TST-003', 'OVERDUE', 33000, '2026-01-01', 36, 980000, 180000, 800000, 742000),
+('KT-TST-004', 'CL-TST-004', 'VH-TST-004', 'OVERDUE', 39500, '2026-01-01', 36, 1120000, 220000, 900000, 834000),
+('KT-TST-005', 'CL-TST-005', 'VH-TST-005', 'OVERDUE', 45500, '2026-01-01', 36, 1250000, 250000, 1000000, 925000);
 
 -- =========================
 -- DEMO SEED: VEHICLES
@@ -41,11 +41,11 @@ INSERT OR REPLACE INTO gps_devices (
   id, vehicle_id, status, lat, lng, last_ping_at, provider, provider_device_id,
   imei, sim_number, ignition_status, speed, last_command, last_command_status, last_command_at
 ) VALUES
-('GPS-TST-001', 'VH-TST-001', 'ONLINE', 11.5564, 104.9282, datetime('now'), 'mock', 'GPS-TST-001', 'IMEI-TST-001', 'SIM-TST-001', 'OFF', 0, '', '', NULL),
-('GPS-TST-002', 'VH-TST-002', 'ONLINE', 11.5581, 104.9305, datetime('now'), 'mock', 'GPS-TST-002', 'IMEI-TST-002', 'SIM-TST-002', 'OFF', 0, '', '', NULL),
-('GPS-TST-003', 'VH-TST-003', 'ONLINE', 11.5538, 104.9257, datetime('now'), 'mock', 'GPS-TST-003', 'IMEI-TST-003', 'SIM-TST-003', 'OFF', 0, '', '', NULL),
-('GPS-TST-004', 'VH-TST-004', 'ONLINE', 11.5602, 104.9321, datetime('now'), 'mock', 'GPS-TST-004', 'IMEI-TST-004', 'SIM-TST-004', 'OFF', 0, '', '', NULL),
-('GPS-TST-005', 'VH-TST-005', 'ONLINE', 11.5519, 104.9276, datetime('now'), 'mock', 'GPS-TST-005', 'IMEI-TST-005', 'SIM-TST-005', 'OFF', 0, '', '', NULL);
+('GPS-TST-001', 'VH-TST-001', 'OVERDUE_WATCH', 11.5455, 104.8922, datetime('now'), 'mock', 'GPS-TST-001', 'IMEI-TST-001', 'SIM-TST-001', 'OFF', 0, '', '', NULL),
+('GPS-TST-002', 'VH-TST-002', 'OVERDUE_WATCH', 11.5798, 104.9175, datetime('now'), 'mock', 'GPS-TST-002', 'IMEI-TST-002', 'SIM-TST-002', 'OFF', 0, '', '', NULL),
+('GPS-TST-003', 'VH-TST-003', 'OVERDUE_WATCH', 11.5362, 104.9488, datetime('now'), 'mock', 'GPS-TST-003', 'IMEI-TST-003', 'SIM-TST-003', 'OFF', 0, '', '', NULL),
+('GPS-TST-004', 'VH-TST-004', 'OVERDUE_WATCH', 11.5914, 104.9631, datetime('now'), 'mock', 'GPS-TST-004', 'IMEI-TST-004', 'SIM-TST-004', 'OFF', 0, '', '', NULL),
+('GPS-TST-005', 'VH-TST-005', 'OVERDUE_WATCH', 11.5224, 104.9104, datetime('now'), 'mock', 'GPS-TST-005', 'IMEI-TST-005', 'SIM-TST-005', 'OFF', 0, '', '', NULL);
 
 -- =========================
 -- DEMO RESET: COLLECTION CASES
@@ -66,11 +66,11 @@ INSERT OR REPLACE INTO collections_cases (
 DELETE FROM installments WHERE contract_id LIKE 'KT-TST-%';
 
 INSERT INTO installments (id, contract_id, seq_no, due_date, amount_due, status, paid_at) VALUES
-('INS-TST-001', 'KT-TST-001', 1, date('now', '-8 days'), 421, 'OVERDUE', NULL),
-('INS-TST-002', 'KT-TST-002', 1, date('now', '-9 days'), 389, 'OVERDUE', NULL),
-('INS-TST-003', 'KT-TST-003', 1, date('now', '-10 days'), 402, 'OVERDUE', NULL),
-('INS-TST-004', 'KT-TST-004', 1, date('now', '-11 days'), 376, 'OVERDUE', NULL),
-('INS-TST-005', 'KT-TST-005', 1, date('now', '-12 days'), 455, 'OVERDUE', NULL);
+('INS-TST-001', 'KT-TST-001', 1, date('now', '-8 days'), 28500, 'OVERDUE', NULL),
+('INS-TST-002', 'KT-TST-002', 1, date('now', '-9 days'), 33000, 'OVERDUE', NULL),
+('INS-TST-003', 'KT-TST-003', 1, date('now', '-10 days'), 39500, 'OVERDUE', NULL),
+('INS-TST-004', 'KT-TST-004', 1, date('now', '-11 days'), 45500, 'OVERDUE', NULL),
+('INS-TST-005', 'KT-TST-005', 1, date('now', '-12 days'), 52000, 'OVERDUE', NULL);
 
 -- =========================
 -- DEMO RESET: COMMANDS / ALERTS

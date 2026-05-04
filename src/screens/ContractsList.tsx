@@ -182,7 +182,7 @@ export default function ContractsList() {
     <div className="screen">
       <div className="screen-header">
         <h1 className="screen-title">Contracts</h1>
-        <RoleGate roles={["FINANCIAL_CONTROLLER"]}>
+        <RoleGate roles={["OPS", "FINANCIAL_CONTROLLER"]}>
           <button
             className="primary-button"
             onClick={() => {
