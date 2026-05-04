@@ -413,6 +413,10 @@ function simulateMockGpsProvider(commandId: string, gps: any, vehicle: any, a: A
     db.transaction(() => {
       db.prepare("UPDATE gps_commands SET status = 'ACKNOWLEDGED', provider_response = ? WHERE id = ?").run(providerResponse, command.id);
       db.prepare("UPDATE gps_devices SET status = ?, last_ping_at = ?, last_command_status = 'ACKNOWLEDGED', last_command_at = ? WHERE id = ?").run(nextGpsStatus, at, at, gps.id);
+
+      db.prepare(
+        "UPDATE alerts SET resolved_at = ? WHERE source = 'GPS' AND resolved_at IS NULL AND title IN ('GPS command failed', 'GPS command timeout') AND entity_id IN (?, ?)"
+      ).run(at, vehicle.id, gps.id);
       audit(a.actor_id, a.actor_role, "vehicle", vehicle.id, "gps.status_change", jsonGps(currentGps), { ...jsonGps(currentGps), status: nextGpsStatus, last_ping_at: at, last_command_status: "ACKNOWLEDGED", last_command_at: at });
     })();
     reconcileGpsStatusFromCommands();

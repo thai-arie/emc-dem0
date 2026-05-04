@@ -278,7 +278,7 @@ const [navBlocked, setNavBlocked] = useState(false);
                 key: "actions",
                 header: "",
                 render: (row) => {
-                  if (row.status !== "FAILED") return null;
+                  if (row.status !== "FAILED" || !latestCommand || row.id !== latestCommand.id) return null;
                   return (
                     <button
                       className="secondary-button"
