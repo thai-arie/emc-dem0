@@ -132,10 +132,12 @@ function actor(req: express.Request): Actor {
   return { actor_id: user.id, actor_role: user.role };
 }
 
-function can(action: "payment.record" | "gps.arm" | "contract.update" | "payment.reverse", role: Role) {
+function can(action: "payment.record" | "gps.arm" | "contract.create" | "contract.update" | "contract.void" | "payment.reverse", role: Role) {
   if (role === "ADMIN") return true;
   if (action === "payment.record") return role === "COLLECTIONS" || role === "FINANCIAL_CONTROLLER";
   if (action === "gps.arm") return role === "COLLECTIONS";
+  if (action === "contract.create") return role === "OPS";
+  if (action === "contract.void") return false;
   if (action === "contract.update" || action === "payment.reverse") return role === "FINANCIAL_CONTROLLER";
   return false;
 }
@@ -830,7 +832,7 @@ app.use(requireAuth);
 
 app.get("/contracts", (_req, res) => {
   refreshOverdueState();
-  const contracts = rows<any>("SELECT c.*, cl.full_name AS client, cl.phone FROM contracts c JOIN clients cl ON cl.id = c.client_id ORDER BY c.id");
+  const contracts = rows<any>("SELECT c.*, cl.full_name AS client, cl.phone FROM contracts c JOIN clients cl ON cl.id = c.client_id WHERE c.status != 'VOID' ORDER BY c.id");
   const payments = rows<any>("SELECT * FROM payments ORDER BY recorded_at DESC LIMIT 20");
   // Source: contracts.financed_amount, falling back to generated schedule total for legacy rows.
   const total_disbursed = contracts.reduce((sum, contract) => sum + (contract.financed_amount || contract.monthly_total * contract.term_months), 0);

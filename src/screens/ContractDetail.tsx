@@ -61,6 +61,54 @@ export default function ContractDetail() {
   const riskBorder = isCriticalRisk ? "rgba(251, 113, 133, 0.55)" : isWarningRisk ? "rgba(250, 204, 21, 0.55)" : "rgba(45, 212, 191, 0.45)";
   return (
     <div className="screen">
+
+      <div style={{
+        display: "flex",
+        gap: "10px",
+        marginBottom: "16px",
+        flexWrap: "wrap"
+      }}>
+        <a
+          href={`tel:${data.client.phone}`}
+          className="primary-button"
+          style={{ textDecoration: "none" }}
+        >
+          Call
+        </a>
+
+        <button
+          className="secondary-button"
+          onClick={() => alert("Reminder sent (mock)")}
+        >
+          Send Reminder
+        </button>
+
+        <button
+          className="secondary-button"
+          onClick={() => alert("Immobilizer approved (mock)")}
+        >
+          Approve Immobilizer
+        </button>
+
+        <button
+          className="danger-button"
+          onClick={() => alert("Immobilizer executed (mock)")}
+        >
+          Execute Immobilizer
+        </button>
+
+        <button
+          className="secondary-button"
+          onClick={async () => {
+            if (!confirm("Void this contract?")) return;
+            await fetch(`http://127.0.0.1:4000/contracts/${data.contract.id}/void`, { method: "POST", credentials: "include" });
+            window.location.reload();
+          }}
+        >
+          Void
+        </button>
+      </div>
+
       {caseId && (
         <div style={{ marginBottom: "16px" }}>
           <button
