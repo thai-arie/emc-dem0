@@ -94,14 +94,38 @@ export default function ContractDetail() {
             if (!confirm("Void this contract?")) return;
 
             const res = await api.voidContract(data.contract.id);
+console.log("VOID CLICK FIRED", res);
+console.log('VOID RAW RESPONSE:', res);
 
             if (!res?.ok) {
-              alert("Void failed");
+              const err = res as any;
+
+      const msg =
+        err?.error?.message ||
+        err?.error?.code ||
+        "Void failed";
+
+      
+
+console.log("VOID RESPONSE:", err);
+
+if (!res?.ok) {
+  const msg =
+    err?.error?.message ||
+    err?.error?.code ||
+    String(err) ||
+    "Void failed";
+
+  alert(msg);
+  return;
+}
+
+alert(msg);
               return;
             }
 
             alert("Contract voided");
-            window.location.reload();
+            detail.reload();
           }}
         >
           Void

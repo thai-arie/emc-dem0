@@ -843,7 +843,7 @@ app.get("/contracts", (_req, res) => {
   const overdue_amount = row<{ value: number }>("SELECT COALESCE(SUM(amount_due), 0) AS value FROM installments WHERE status = 'OVERDUE'")?.value ?? 0;
   const active_contracts = contracts.filter((contract) => contract.status === "ACTIVE").length;
   const overdue_contracts = contracts.filter((contract) => contract.status === "OVERDUE").length;
-  res.json({ contracts, payments, cash: { total_disbursed, total_collected, outstanding, overdue_amount, active_contracts, overdue_contracts } });
+  res.json({  contracts, payments, cash: { total_disbursed, total_collected, outstanding, overdue_amount, active_contracts, overdue_contracts } });
 });
 
 app.get("/contracts/void", (req, res) => {
@@ -857,7 +857,7 @@ app.get("/contracts/void", (req, res) => {
     ORDER BY c.id DESC
   `).all();
 
-  res.json({ contracts: rows });
+  res.json({  contracts: rows });
 });
 
 app.get("/contracts/:id", (req, res) => {
@@ -869,6 +869,10 @@ app.get("/contracts/:id", (req, res) => {
   const vehicle = row<any>("SELECT * FROM vehicles WHERE id = ?", [contract.vehicle_id]);
   const gps = vehicle ? row<any>("SELECT * FROM gps_devices WHERE vehicle_id = ?", [vehicle.id]) : null;
   const payments = rows<any>("SELECT * FROM payments WHERE contract_id = ? ORDER BY recorded_at DESC", [contract.id]);
+  const has_payments = payments.length > 0;
+
+  
+
   const cases = rows<any>(
     `SELECT
       cc.*,
@@ -892,7 +896,7 @@ app.get("/contracts/:id", (req, res) => {
   const paid_to_date = payments.reduce((sum, payment) => sum + payment.amount, 0);
   const outstanding_balance = outstandingForContract(contract.id);
   const overdue_amount = row<{ value: number }>("SELECT COALESCE(SUM(amount_due), 0) AS value FROM installments WHERE contract_id = ? AND status = 'OVERDUE'", [contract.id])?.value ?? 0;
-  res.json({ contract, client, vehicle, gps: gps ? jsonGps(gps) : null, payments, cases, audit: auditRows.map((item) => ({ ...item, before: item.before_json ? JSON.parse(item.before_json) : null, after: item.after_json ? JSON.parse(item.after_json) : null })), financials: { paid_to_date, outstanding_balance, overdue_amount, credit_balance: contract.credit_balance ?? 0 } });
+  res.json({  contract, client, vehicle, gps: gps ? jsonGps(gps) : null, payments, cases, audit: auditRows.map((item) => ({ ...item, before: item.before_json ? JSON.parse(item.before_json) : null, after: item.after_json ? JSON.parse(item.after_json) : null })), financials: { paid_to_date, outstanding_balance, overdue_amount, credit_balance: contract.credit_balance ?? 0 } });
 });
 
 app.post("/contracts", (req, res) => {
@@ -949,7 +953,15 @@ app.post("/contracts/:id/void", (req, res) => {
   )?.cnt ?? 0;
 
   if (payments > 0) {
-    return res.status(409).json({ error: "Cannot void contract with payments" });
+    return res.status(409).json({
+    error: {
+      code: "HAS_PAYMENTS",
+      message: "Cannot void contract because payments already exist",
+      details: {
+        contract_id: contract.id
+      }
+    }
+  });
   }
 
   db.prepare("UPDATE contracts SET status = 'VOID' WHERE id = ?").run(contract.id);
