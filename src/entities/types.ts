@@ -22,7 +22,7 @@ export interface Contract {
   id: string;
   client_id: string;
   vehicle_id: string;
-  status: "ACTIVE" | "OVERDUE" | "VOID";
+  status: "ACTIVE" | "OVERDUE";
   monthly_total: number;
   start_date: string;
   term_months: number;
