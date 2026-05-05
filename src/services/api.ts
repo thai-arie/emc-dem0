@@ -216,6 +216,11 @@ export const api = {
     refresh();
     return result;
   },
+  voidContract: async (id: string) => {
+    const result = await request<{ ok: boolean }>(`/contracts/${id}/void`, { method: "POST" });
+    refresh();
+    return result;
+  },
   getInstallments: (contract_id?: string) => request<{ installments: Array<Installment & { client?: string }>; payments: Payment[] }>(`/installments${contract_id ? `?contract_id=${encodeURIComponent(contract_id)}` : ""}`),
   recordPayment: async (body: { installment_id: string; amount: number; method: Payment["method"]; reference: string; note: string; allocation_type?: Payment["allocation_type"]; idempotency_key?: string } & ActorPayload) => {
     const result = await request<Payment>("/payments", { method: "POST", body: JSON.stringify({ ...body, idempotency_key: body.idempotency_key ?? crypto.randomUUID() }) });
