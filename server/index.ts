@@ -137,7 +137,7 @@ function can(action: "payment.record" | "gps.arm" | "contract.create" | "contrac
   if (action === "payment.record") return role === "COLLECTIONS" || role === "FINANCIAL_CONTROLLER";
   if (action === "gps.arm") return role === "COLLECTIONS";
   if (action === "contract.create") return role === "OPS";
-  if (action === "contract.void") return false;
+  if (action === "contract.void") return String(role) === "ADMIN";
   if (action === "contract.update" || action === "payment.reverse") return role === "FINANCIAL_CONTROLLER";
   return false;
 }

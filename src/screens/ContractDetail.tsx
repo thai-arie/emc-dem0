@@ -75,6 +75,25 @@ export default function ContractDetail() {
         >
           Call
         </a>
+
+        <button
+          className="secondary-button"
+          onClick={async () => {
+            if (!confirm("Void this contract?")) return;
+
+            const res = await api.voidContract(data.contract.id);
+
+            if (!res?.ok) {
+              alert("Void failed");
+              return;
+            }
+
+            alert("Contract voided");
+            window.location.reload();
+          }}
+        >
+          Void
+        </button>
 </div>
 
       {caseId && (
