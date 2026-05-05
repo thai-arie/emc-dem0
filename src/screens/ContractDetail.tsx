@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import DataTable from "../components/DataTable";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -13,6 +13,8 @@ import type { Installment, Payment } from "../entities/types";
 
 export default function ContractDetail() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const caseId = searchParams.get("caseId");
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const toast = useUi((state) => state.addToast);
@@ -49,8 +51,28 @@ export default function ContractDetail() {
   const auditRows = [...data.audit].sort((a, b) => b.ts.localeCompare(a.ts));
   const paymentAmount = selected ? Math.round(Number(amount || selected.amount_due / 100) * 100) : 0;
   const needsAllocation = selected ? paymentAmount > selected.amount_due : false;
+  const maxDpd = Math.max(0, ...data.cases.map((item) => Number((item as { dpd?: number }).dpd ?? 0)));
+  const overdueAmount = data.financials.overdue_amount;
+  const isCriticalRisk = overdueAmount > 0 && (maxDpd >= 10 || overdueAmount >= data.contract.monthly_total);
+  const isWarningRisk = overdueAmount > 0 && !isCriticalRisk;
+  const riskLabel = isCriticalRisk ? "CRITICAL" : isWarningRisk ? "WARNING" : "HEALTHY";
+  const riskColor = isCriticalRisk ? "#fb7185" : isWarningRisk ? "#facc15" : "#2dd4bf";
+  const riskBackground = isCriticalRisk ? "rgba(251, 113, 133, 0.12)" : isWarningRisk ? "rgba(250, 204, 21, 0.12)" : "rgba(45, 212, 191, 0.10)";
+  const riskBorder = isCriticalRisk ? "rgba(251, 113, 133, 0.55)" : isWarningRisk ? "rgba(250, 204, 21, 0.55)" : "rgba(45, 212, 191, 0.45)";
   return (
     <div className="screen">
+      {caseId && (
+        <div style={{ marginBottom: "16px" }}>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              window.location.href = `/collections/${caseId}`;
+            }}
+          >
+            ← Back to Case
+          </button>
+        </div>
+      )}
       <div className="screen-header">
         <div>
           <h1 className="screen-title">{data.contract.id}</h1>
@@ -68,23 +90,126 @@ export default function ContractDetail() {
         ))}
       </div>
       {tab === "Overview" ? (
-        <div className="screen-panel">
-          <h2>Contract summary</h2>
-          <p>Client: <Link to={`/clients/${data.client.id}`}>{data.client.full_name}</Link></p>
-          <p>Monthly total: {formatMoney(data.contract.monthly_total)}</p>
-          <p>Vehicle: <Link to={`/gps?vehicle=${data.vehicle.id}`}>{data.vehicle.brand} {data.vehicle.model} {data.vehicle.plate}</Link></p>
-          <p>GPS status: <StatusBadge status={data.gps.status} /></p>
-          <div className="screen-grid">
-            <div><strong>Vehicle price</strong><p>{formatMoney(data.contract.vehicle_price)}</p></div>
-            <div><strong>Down payment</strong><p>{formatMoney(data.contract.down_payment)}</p></div>
-            <div><strong>Financed amount</strong><p>{formatMoney(data.contract.financed_amount)}</p></div>
-            <div><strong>Monthly payment</strong><p>{formatMoney(data.contract.monthly_total)}</p></div>
-            <div><strong>Term</strong><p>{data.contract.term_months} months</p></div>
-            <div><strong>Remaining principal</strong><p>{formatMoney(data.financials.outstanding_balance)}</p></div>
-            <div><strong>Paid to date</strong><p>{formatMoney(data.financials.paid_to_date)}</p></div>
-            <div><strong>Overdue amount</strong><p>{formatMoney(data.financials.overdue_amount)}</p></div>
-            <div><strong>Outstanding balance</strong><p>{formatMoney(data.financials.credit_balance)}</p></div>
-          </div>
+        <div style={{ display: "grid", gap: "18px" }}>
+          <section
+            className="screen-panel"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.15fr 0.85fr",
+              gap: "18px",
+              alignItems: "stretch"
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
+                <h2 style={{ margin: 0, fontSize: "22px", fontWeight: 900 }}>Client Profile</h2>
+                <StatusBadge status={data.contract.status} />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                <div style={{ padding: "14px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Full name</div>
+                  <div style={{ fontSize: "24px", fontWeight: 800, color: "#f8fafc", lineHeight: 1.2 }}>{data.client.full_name}</div>
+                </div>
+                <div style={{ padding: "14px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Phone</div>
+                  <div style={{ fontSize: "24px", fontWeight: 800, color: "#f8fafc", lineHeight: 1.2 }}>{data.client.phone}</div>
+                </div>
+                <div style={{ padding: "14px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Address</div>
+                  <div style={{ fontSize: "21px", fontWeight: 750, color: "#e5e7eb", lineHeight: 1.25 }}>{data.client.address || "-"}</div>
+                </div>
+                <div style={{ padding: "14px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>National ID / passport</div>
+                  <div style={{ fontSize: "21px", fontWeight: 750, color: "#e5e7eb", lineHeight: 1.25 }}>{data.client.national_id || "-"}</div>
+                </div>
+                <div style={{ gridColumn: "1 / -1", padding: "14px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Emergency contact</div>
+                  <div style={{ fontSize: "21px", fontWeight: 750, color: "#e5e7eb", lineHeight: 1.25 }}>
+                    {[data.client.emergency_contact_name, data.client.emergency_contact_phone].filter(Boolean).join(" · ") || "-"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside
+              style={{
+                border: "1px solid rgba(45, 212, 191, 0.45)",
+                borderRadius: "16px",
+                padding: "18px",
+                background: "rgba(8, 47, 73, 0.22)"
+              }}
+            >
+              <p style={{ margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "12px", fontWeight: 800, color: "#9ca3af" }}>
+                Financial exposure
+              </p>
+              <div style={{ fontSize: "42px", fontWeight: 900, color: "#2dd4bf", marginBottom: "10px" }}>
+                {formatMoney(data.financials.credit_balance)}
+              </div>
+
+              <div style={{
+                border: `1px solid ${riskBorder}`,
+                background: riskBackground,
+                borderRadius: "14px",
+                padding: "14px",
+                marginBottom: "16px"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+                  <span style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "12px", fontWeight: 900, color: "#9ca3af" }}>
+                    Overdue exposure
+                  </span>
+                  <span style={{ color: riskColor, border: `1px solid ${riskBorder}`, borderRadius: "999px", padding: "4px 10px", fontSize: "12px", fontWeight: 900 }}>
+                    {riskLabel}
+                  </span>
+                </div>
+                <div style={{ fontSize: "34px", fontWeight: 950, color: riskColor }}>
+                  {formatMoney(overdueAmount)}
+                </div>
+                <div style={{ marginTop: "6px", color: "#9ca3af", fontSize: "13px" }}>
+                  {maxDpd > 0 ? `${maxDpd} days past due` : "No active delinquency"}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: "11px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "10px" }}>
+                  <span>Monthly payment</span><strong>{formatMoney(data.contract.monthly_total)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "10px" }}>
+                  <span>Paid to date</span><strong>{formatMoney(data.financials.paid_to_date)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "10px" }}>
+                  <span>Overdue amount</span><strong style={{ color: riskColor }}>{formatMoney(overdueAmount)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "10px" }}>
+                  <span>Term</span><strong>{data.contract.term_months} months</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>GPS status</span><StatusBadge status={data.gps.status} />
+                </div>
+              </div>
+            </aside>
+          </section>
+
+          <section className="screen-panel">
+            <h2>Vehicle & GPS</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "14px" }}>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Brand</div><div style={{ fontSize: "20px", fontWeight: 750, color: "#f8fafc" }}>{data.vehicle.brand}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Model</div><div style={{ fontSize: "20px", fontWeight: 750, color: "#f8fafc" }}>{data.vehicle.model}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Plate</div><div style={{ fontSize: "20px", fontWeight: 800, color: "#f8fafc", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{data.vehicle.plate}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>VIN</div><div style={{ fontSize: "20px", fontWeight: 800, color: "#f8fafc", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{data.vehicle.vin || "-"}</div></div>
+            </div>
+          </section>
+
+          <section className="screen-panel">
+            <h2>Deal Terms</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "14px" }}>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Vehicle price</div><div style={{ fontSize: "22px", fontWeight: 850, color: "#f8fafc" }}>{formatMoney(data.contract.vehicle_price)}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Down payment</div><div style={{ fontSize: "22px", fontWeight: 850, color: "#f8fafc" }}>{formatMoney(data.contract.down_payment)}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Financed amount</div><div style={{ fontSize: "22px", fontWeight: 850, color: "#f8fafc" }}>{formatMoney(data.contract.financed_amount)}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Monthly payment</div><div style={{ fontSize: "22px", fontWeight: 850, color: "#f8fafc" }}>{formatMoney(data.contract.monthly_total)}</div></div>
+              <div><div style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "11px", fontWeight: 900, color: "#94a3b8", marginBottom: "10px" }}>Outstanding balance</div><div style={{ fontSize: "24px", fontWeight: 900, color: "#2dd4bf" }}>{formatMoney(data.financials.credit_balance)}</div></div>
+            </div>
+          </section>
         </div>
       ) : tab === "Schedule" ? (
         <DataTable
