@@ -199,7 +199,7 @@ export default function ContractsList() {
         rowKey={(row) => row.id}
         onRowClick={(row) => navigate(`/contracts/${row.id}`)}
         searchKey={(row) => `${row.id} ${row.client} ${row.status}`}
-        filters={[{ label: "OVERDUE", predicate: (row) => row.status === "OVERDUE" }, { label: "ACTIVE", predicate: (row) => row.status === "ACTIVE" }]}
+        filters={[{ label: "OVERDUE", predicate: (row) => row.status === "OVERDUE" }, { label: "ACTIVE", predicate: (row) => row.status === "ACTIVE" }, { label: "VOID", predicate: (row) => row.status === "VOID" }]}
         exportCSV="contracts.csv"
         columns={[
           { key: "id", header: "ID" },
