@@ -182,17 +182,22 @@ export default function ContractsList() {
     <div className="screen">
       <div className="screen-header">
         <h1 className="screen-title">Contracts</h1>
-        <RoleGate roles={["OPS", "FINANCIAL_CONTROLLER"]}>
-          <button
-            className="primary-button"
-            onClick={() => {
-              setErrors({});
-              setCreating(true);
-            }}
-          >
-            + New Contract
-          </button>
-        </RoleGate>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Link className="secondary-button" to="/contracts/void">
+            Voided
+          </Link>
+          <RoleGate roles={["OPS", "FINANCIAL_CONTROLLER"]}>
+            <button
+              className="primary-button"
+              onClick={() => {
+                setErrors({});
+                setCreating(true);
+              }}
+            >
+              + New Contract
+            </button>
+          </RoleGate>
+        </div>
       </div>
       <DataTable
         rows={rows}

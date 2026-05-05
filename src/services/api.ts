@@ -210,6 +210,7 @@ export const api = {
     return result.user;
   },
   getContracts: () => request<ContractsResponse>("/contracts"),
+  getVoidedContracts: () => request<{ contracts: Array<Contract & { client: string; phone: string }> }>("/contracts/void"),
   getContract: (id: string) => request<ContractDetailResponse>(`/contracts/${id}`),
   getClient: (id: string) => request<ClientProfileResponse>(`/clients/${id}`),
   createContract: async (body: CreateContractPayload) => {

@@ -846,6 +846,20 @@ app.get("/contracts", (_req, res) => {
   res.json({ contracts, payments, cash: { total_disbursed, total_collected, outstanding, overdue_amount, active_contracts, overdue_contracts } });
 });
 
+app.get("/contracts/void", (req, res) => {
+  if (!requirePermission(req, res, "contract.update")) return;
+
+  const rows = db.prepare(`
+    SELECT c.*, cl.full_name as client, cl.phone
+    FROM contracts c
+    JOIN clients cl ON cl.id = c.client_id
+    WHERE c.status = 'VOID'
+    ORDER BY c.id DESC
+  `).all();
+
+  res.json({ contracts: rows });
+});
+
 app.get("/contracts/:id", (req, res) => {
   refreshOverdueState();
   reconcileGpsStatusFromCommands();

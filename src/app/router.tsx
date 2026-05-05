@@ -3,6 +3,7 @@ import AppShell from "./layout/AppShell";
 import Login from "../screens/Login";
 import Overview from "../screens/Overview";
 import ContractsList from "../screens/ContractsList";
+import VoidedContracts from "../screens/VoidedContracts";
 import ContractDetail from "../screens/ContractDetail";
 import ClientProfile from "../screens/ClientProfile";
 import Payments from "../screens/Payments";
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Overview /> },
       { path: "contracts", element: <ContractsList /> },
+      { path: "contracts/void", element: <VoidedContracts /> },
       { path: "contracts/:id", element: <ContractDetail /> },
       { path: "clients/:id", element: <ClientProfile /> },
       { path: "payments", element: <Payments /> },
