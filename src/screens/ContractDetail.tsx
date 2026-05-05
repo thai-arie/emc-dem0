@@ -61,6 +61,18 @@ export default function ContractDetail() {
   const riskBorder = isCriticalRisk ? "rgba(251, 113, 133, 0.55)" : isWarningRisk ? "rgba(250, 204, 21, 0.55)" : "rgba(45, 212, 191, 0.45)";
   return (
     <div className="screen">
+      {String(data.contract.status) === "VOID" && (
+        <div style={{
+          background: "#fee2e2",
+          color: "#991b1b",
+          padding: "12px",
+          borderRadius: "8px",
+          marginBottom: "16px",
+          fontWeight: 600
+        }}>
+          Contract is VOID. No further actions are allowed.
+        </div>
+      )}
 
       <div style={{
         display: "flex",
