@@ -276,7 +276,7 @@ export default function ContractDetail() {
                 return (
                   <div className="button-row">
                     <StatusBadge status={row.status} />
-                    {actionLabel ? (
+                    {actionLabel && String(data.contract.status) !== "VOID" ? (
                       <RoleGate roles={["COLLECTIONS", "FINANCIAL_CONTROLLER"]}>
                         <button
                           className="secondary-button"
