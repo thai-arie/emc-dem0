@@ -894,31 +894,7 @@ app.post("/contracts", (req, res) => {
   const financedAmount = cents(req.body.financed_amount || vehiclePrice - downPayment);
   if (!req.body.client_name || !req.body.phone || monthly <= 0 || !req.body.vehicle_brand || !req.body.vehicle_model || !req.body.vin || !req.body.plate) return res.status(400).json({ error: "Invalid contract" });
 
-app.post("/contracts/:id/void", (req, res) => {
-  if (!requirePermission(req, res, "contract.void")) return;
 
-  const a = actor(req);
-  const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [req.params.id]);
-  if (!contract) return res.status(404).json({ error: "Contract not found" });
-
-  const payments = row<{ cnt: number }>(
-    "SELECT COUNT(*) as cnt FROM payments WHERE contract_id = ?",
-    [contract.id]
-  )?.cnt ?? 0;
-
-  if (payments > 0) {
-    return res.status(409).json({ error: "Cannot void contract with payments" });
-  }
-
-  db.prepare("UPDATE contracts SET status = 'VOID' WHERE id = ?").run(contract.id);
-
-  audit(a.actor_id, a.actor_role, "contract", contract.id, "contract.voided", contract, {
-    ...contract,
-    status: "VOID"
-  });
-
-  res.json({ ok: true });
-});
 
   const suffix = String(Date.now()).slice(-4);
   const clientId = nextId("CL");
@@ -944,6 +920,32 @@ app.post("/contracts/:id/void", (req, res) => {
   tx();
   refreshOverdueState();
   res.status(201).json(row<any>("SELECT * FROM contracts WHERE id = ?", [contractId]));
+});
+
+app.post("/contracts/:id/void", (req, res) => {
+  if (!requirePermission(req, res, "contract.void")) return;
+
+  const a = actor(req);
+  const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [req.params.id]);
+  if (!contract) return res.status(404).json({ error: "Contract not found" });
+
+  const payments = row<{ cnt: number }>(
+    "SELECT COUNT(*) as cnt FROM payments WHERE contract_id = ?",
+    [contract.id]
+  )?.cnt ?? 0;
+
+  if (payments > 0) {
+    return res.status(409).json({ error: "Cannot void contract with payments" });
+  }
+
+  db.prepare("UPDATE contracts SET status = 'VOID' WHERE id = ?").run(contract.id);
+
+  audit(a.actor_id, a.actor_role, "contract", contract.id, "contract.voided", contract, {
+    ...contract,
+    status: "VOID"
+  });
+
+  res.json({ ok: true });
 });
 
 app.get("/installments", (req, res) => {
