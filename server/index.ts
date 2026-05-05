@@ -851,11 +851,6 @@ app.get("/contracts/:id", (req, res) => {
   reconcileGpsStatusFromCommands();
   const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [req.params.id]);
   if (!contract) return res.status(404).json({ error: "Contract not found" });
-
-  if (contract.status === "VOID") {
-    return res.status(409).json({ error: "Contract already voided" });
-  }
-
   const client = row<any>("SELECT * FROM clients WHERE id = ?", [contract.client_id]);
   const vehicle = row<any>("SELECT * FROM vehicles WHERE id = ?", [contract.vehicle_id]);
   const gps = vehicle ? row<any>("SELECT * FROM gps_devices WHERE vehicle_id = ?", [vehicle.id]) : null;
@@ -934,11 +929,6 @@ app.post("/contracts/:id/void", (req, res) => {
   const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [req.params.id]);
   if (!contract) return res.status(404).json({ error: "Contract not found" });
 
-  if (contract.status === "VOID") {
-    return res.status(409).json({ error: "Contract already voided" });
-  }
-
-
   const payments = row<{ cnt: number }>(
     "SELECT COUNT(*) as cnt FROM payments WHERE contract_id = ?",
     [contract.id]
@@ -1002,11 +992,6 @@ app.post("/payments", (req, res) => {
   if (!installment || !["SCHEDULED", "DUE", "OVERDUE"].includes(installment.status)) return res.status(409).json({ error: "Invalid installment transition" });
   const contract = row<any>("SELECT * FROM contracts WHERE id = ?", [installment.contract_id]);
   if (!contract) return res.status(404).json({ error: "Contract not found" });
-
-  if (contract.status === "VOID") {
-    return res.status(409).json({ error: "Contract already voided" });
-  }
-
   const at = nowIso();
   const method = ["cash", "transfer", "aba", "wing"].includes(req.body.method) ? req.body.method : "cash";
   const amount = cents(req.body.amount || installment.amount_due);
