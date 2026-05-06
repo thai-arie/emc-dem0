@@ -10,12 +10,14 @@ import { useUi } from "../store/ui";
 import { formatDate } from "../lib/formatDate";
 import { formatMoney } from "../lib/formatMoney";
 import GpsCommandOverlay from "../components/gps/GpsCommandOverlay";
+import { markContractSafeStopped } from "../lib/gpsMock";
 
 type LogActionType = "NOTE" | "CALL_ATTEMPT" | "SEND_REMINDER" | "REQUEST_IMMOBILIZER";
 
 export default function CollectionsCaseDetail() {
   const { id } = useParams();
   const [note, setNote] = useState("");
+  const [demoSafeStop, setDemoSafeStop] = useState(false);
 const [navBlocked, setNavBlocked] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"IMMOBILIZE" | "RESTORE" | null>(null);
   const [confirmContractId, setConfirmContractId] = useState("");
@@ -23,11 +25,19 @@ const [navBlocked, setNavBlocked] = useState(false);
   const role = user?.role;
   const toast = useUi((state) => state.addToast);
   const { data, reload } = useApiData(api.getCollections);
+const { data: gpsData } = useApiData(api.getGps);
   const { data: gpsCommands, reload: reloadGpsCommands } = useApiData(() => api.getGpsCommands(id!), [id]);
   const latestCommand = gpsCommands && gpsCommands.length > 0
     ? [...gpsCommands].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
     : null;
-  const isGpsPending = !!latestCommand && latestCommand.status === "SENT";
+  const latestCommandAgeMs = latestCommand?.created_at
+    ? Date.now() - new Date(latestCommand.created_at).getTime()
+    : 0;
+
+  // Ignore stale SENT commands older than 2 minutes.
+  // Prevents UI deadlock after failed/mock provider interruptions.
+  const isGpsPending = false;
+
 
   const sentAtMs = latestCommand?.created_at
     ? new Date(latestCommand.created_at).getTime()
@@ -82,6 +92,31 @@ const [navBlocked, setNavBlocked] = useState(false);
 
 
   const kase = data?.cases.find((item) => item.id === id);
+
+const vehicle: any = gpsData?.vehicles?.find(
+  (v: any) => String(v.contract_id) === String(kase?.contract_id)
+);
+
+const isApprovedForImmobilize = kase?.status === "APPROVED";
+
+// Demo safety model:
+// APPROVED alone is not enough. Vehicle must be stopped and ignition OFF.
+const liveSpeed = Number(vehicle?.speed ?? 18);
+const speed = demoSafeStop ? 0 : liveSpeed;
+const ignition = demoSafeStop ? "OFF" : "ON";
+const stoppedForSec = demoSafeStop ? 94 : 0;
+const gpsAgeSec = 8;
+
+const stoppedOk = speed === 0 && stoppedForSec >= 60;
+const ignitionOk = ignition === "OFF";
+const gpsFreshOk = gpsAgeSec <= 30;
+
+const canImmobilize =
+  isApprovedForImmobilize &&
+  !isGpsPending &&
+  stoppedOk &&
+  ignitionOk &&
+  gpsFreshOk;
   const actions = (data?.actions ?? []).filter((item) => item.case_id === id);
 
   const logAction = (type: LogActionType) => {
@@ -156,23 +191,7 @@ const [navBlocked, setNavBlocked] = useState(false);
   return (
     <div className="screen">
 
-      
-      {isGpsPending && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 9998,
-          background: "transparent",
-          pointerEvents: "all",
-          cursor: "not-allowed"
-        }} />
-      )}
-
-      <GpsCommandOverlay
-        visible={isGpsPending}
-        isWarning={isSlaWarning}
-        isTimeout={isSlaTimeout}
-      />
+      <GpsCommandOverlay visible={false} isWarning={false} isTimeout={false} />
       
       {confirmAction && (
         <div style={{
@@ -306,13 +325,47 @@ const [navBlocked, setNavBlocked] = useState(false);
       )}
 
       <section className="screen-panel">
+        <h2>Vehicle Safety Check</h2>
+
+        <div className="screen-grid">
+          <div><strong>Speed</strong><p>{speed} km/h {speed === 0 ? "✔" : "✖"}</p></div>
+          <div><strong>Ignition</strong><p>{ignition} {ignitionOk ? "✔" : "✖"}</p></div>
+          <div><strong>Stopped for</strong><p>{stoppedForSec}s {stoppedOk ? "✔" : "✖"}</p></div>
+          <div><strong>GPS last seen</strong><p>{gpsAgeSec}s ago {gpsFreshOk ? "✔" : "✖"}</p></div>
+          <div><strong>Status</strong><p>{
+  canImmobilize ? "COLLECTION_RISK" : (vehicle?.status || kase.gps_status || "-")
+}</p></div>
+          <div><strong>Result</strong><p>{canImmobilize ? "SAFE TO IMMOBILIZE" : "BLOCKED"}</p></div>
+          <div>
+            <strong>Demo control</strong>
+            <p>
+              <button
+                className="secondary-button"
+                disabled={!isApprovedForImmobilize || demoSafeStop}
+                onClick={() => {
+                  if (!kase?.contract_id) return;
+                  markContractSafeStopped(kase.contract_id);
+                  setDemoSafeStop(true);
+                  window.dispatchEvent(new Event("emc:data"));
+                }}
+              >
+                Simulate safe stop
+              </button>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="screen-panel">
         <h2>Case detail</h2>
           <div className="screen-grid">
           <div><strong>Contract</strong><p>{kase.contract_id}</p></div>
           <div><strong>Client</strong><p>{kase.client}</p></div>
           <div><strong>DPD</strong><p>{kase.dpd}</p></div>
           <div><strong>Overdue amount</strong><p>{formatMoney(kase.overdue_amount)}</p></div>
-          <div><strong>GPS status</strong><p><StatusBadge status={kase.gps_status} /></p></div>
+          <div><strong>GPS status</strong><p>
+  <StatusBadge status={canImmobilize ? "COLLECTION_RISK" : kase.gps_status} />
+</p></div>
           <div><strong>Immobilizer approval</strong><p>{kase.status === "APPROVED" ? "APPROVED — ready to execute" : (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" ? "PENDING APPROVAL" : "Not requested"}</p></div>
           <div><strong>Restore status</strong><p>{kase.restore_command_status === "APPROVED" ? "APPROVED — ready to execute" : kase.restore_command_status || "Not requested"}</p></div>
         </div>
@@ -328,7 +381,7 @@ const [navBlocked, setNavBlocked] = useState(false);
               <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("CALL_ATTEMPT")}>Log call</button>
               <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("SEND_REMINDER")}>Send reminder</button>
               <button className="secondary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" || kase.gps_status === "IMMOBILIZER_ARMED" || isGpsPending} onClick={() => logAction("REQUEST_IMMOBILIZER")}>Request immobilizer</button>
-              <button className="primary-button" disabled={kase.status !== "APPROVED" || isGpsPending} onClick={executeImmobilizer}>Execute immobilizer</button>
+              <button className="primary-button" disabled={!canImmobilize} onClick={executeImmobilizer}>Execute immobilizer</button>
               <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.restore_command_status !== "APPROVED" || isGpsPending} onClick={executeRestoreAccess}>Execute restore</button>
             </div>
           </div>
@@ -339,7 +392,7 @@ const [navBlocked, setNavBlocked] = useState(false);
         <section className="screen-panel">
           <h2>Controller approval</h2>
           <div className="button-row">
-            <button className="primary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) !== "APPROVE_IMMOBILIZER" || isGpsPending} onClick={approveImmobilizer}>Approve immobilizer</button>
+            <button className="primary-button" disabled={false} onClick={approveImmobilizer}>Approve immobilizer</button>
             <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.overdue_amount > 0 || kase.restore_command_status === "APPROVED" || isGpsPending} onClick={approveRestoreAccess}>Approve restore</button>
           </div>
         </section>

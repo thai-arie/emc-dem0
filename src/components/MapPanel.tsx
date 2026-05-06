@@ -1,110 +1,218 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { CollectionsCase, Contract, GPSDevice, Vehicle } from "../entities/types";
-import styles from "./MapPanel.module.css";
 
-type MapPanelProps = {
-  vehicles: Vehicle[];
-  gpsDevices: GPSDevice[];
-  contracts: Array<Contract & { client?: string }>;
-  cases: CollectionsCase[];
-  onPick: (vehicleId: string) => void;
-};
+export default function MapPanel(props: any) {
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
+  const vehiclesRef = useRef<Map<string, any>>(new Map());
+  const [search, setSearch] = useState("");
 
-const markerColors = {
-  online: "#2dd4bf",
-  warning: "#facc15",
-  armed: "#ff4d4d"
-};
+  const vehicles = props?.vehicles ?? [];
 
-type MarkerState = "ONLINE" | "COLLECTION_RISK" | "IMMOBILIZER_ARMED";
+  const getColor = (v: any) => {
+    if (v?.status === "IMMOBILIZER_ARMED" || v?.gps_status === "IMMOBILIZER_ARMED") return "red";
+    if (v?.status === "COLLECTION_RISK") return "orange";
+    return "green";
+  };
 
-function getMarkerState({
-  contract,
-  gpsDevice,
-  collectionsCase
-}: {
-  contract: (Contract & { client?: string }) | undefined;
-  gpsDevice: GPSDevice;
-  collectionsCase: CollectionsCase | undefined;
-}): MarkerState {
-  if (gpsDevice.status === "IMMOBILIZER_ARMED") return "IMMOBILIZER_ARMED";
-  const hasCollectionRisk =
-    contract?.status === "OVERDUE" ||
-    Boolean(collectionsCase && collectionsCase.status !== "CLOSED" && collectionsCase.status !== "CURED") ||
-    ["SEND_REMINDER", "CALL_ATTEMPT", "ARM_IMMOBILIZER"].includes(collectionsCase?.next_action_type ?? "");
-  if (hasCollectionRisk) return "COLLECTION_RISK";
-  return "ONLINE";
-}
+  const popupHtml = (d: any) => {
+    const lat = Number(d.lat);
+    const lng = Number(d.lng);
+    const coords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
 
-function markerColor(state: MarkerState) {
-  if (state === "IMMOBILIZER_ARMED") return markerColors.armed;
-  if (state === "COLLECTION_RISK") return markerColors.warning;
-  return markerColors.online;
-}
+    const recoveryBlock =
+      d.status === "IMMOBILIZER_ARMED"
+        ? `
+          <hr/>
+          <b>Recovery location</b><br/>
+          Lat: ${lat.toFixed(6)}<br/>
+          Lng: ${lng.toFixed(6)}<br/>
+          <button
+            onclick="navigator.clipboard.writeText('${coords}')"
+            style="margin-top:6px;padding:5px 8px;border-radius:6px;border:1px solid #999;background:white;cursor:pointer;"
+          >
+            Copy coordinates
+          </button>
+          <br/>
+          <a href="${mapsUrl}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:6px;">
+            Open in Google Maps
+          </a>
+        `
+        : "";
 
-function markerClassName(state: MarkerState) {
-  if (state === "IMMOBILIZER_ARMED") return styles.markerRed;
-  if (state === "COLLECTION_RISK") return styles.markerYellow;
-  return styles.markerGreen;
-}
+    return `
+      Vehicle<br/>
+      ID: ${d.id}<br/>
+      Contract: ${d.contract_id || "-"}<br/>
+      Client: ${d.client || "-"}<br/>
+      Plate: ${d.plate || "-"}<br/>
+      Speed: ${d.speed ?? 0} km/h<br/>
+      Status: ${d.status || "-"}
+      ${recoveryBlock}
+    `;
+  };
 
-function markerTooltip(vehicle: Vehicle, gps: GPSDevice, contract: (Contract & { client?: string }) | undefined, collectionsCase: CollectionsCase | undefined, state: MarkerState) {
-  return [
-    `<strong>${vehicle.contract_id}</strong>`,
-    `Client: ${contract?.client ?? "-"}`,
-    `Contract: ${contract?.status ?? "-"}`,
-    `Case: ${collectionsCase ? `${collectionsCase.id} / ${collectionsCase.status}` : "-"}`,
-    `GPS: ${gps.status}`,
-    `Display state: ${state}`
-  ].join("<br />");
-}
+  const openVehicle = (vehicleId: string) => {
+    const d = vehiclesRef.current.get(vehicleId);
+    const marker = markersRef.current.get(vehicleId);
 
-export default function MapPanel({ vehicles, gpsDevices, contracts, cases, onPick }: MapPanelProps) {
-  const host = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  useEffect(() => {
-    if (!host.current) return;
-    if (!mapRef.current) {
-      mapRef.current = L.map(host.current).setView([11.5564, 104.9282], 12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "" }).addTo(mapRef.current);
-    }
-    const group = L.layerGroup().addTo(mapRef.current);
-    vehicles.forEach((vehicle) => {
-      const gps = gpsDevices.find((item) => item.vehicle_id === vehicle.id);
-      if (!gps) return;
-      const contract = contracts.find((item) => item.id === vehicle.contract_id);
-      const collectionsCase = cases.find((item) => item.contract_id === vehicle.contract_id && item.status !== "CLOSED" && item.status !== "CURED");
-      const state = getMarkerState({ contract, gpsDevice: gps, collectionsCase });
-      const color = markerColor(state);
-      const marker = L.circleMarker([gps.last_position.lat, gps.last_position.lng], {
-        radius: state === "ONLINE" ? 8 : 12,
-        color,
-        fillColor: color,
-        fillOpacity: 0.96,
-        weight: state === "ONLINE" ? 3 : 5,
-        opacity: 1,
-        className: markerClassName(state)
-      })
-        .bindTooltip(markerTooltip(vehicle, gps, contract, collectionsCase, state))
-        .bindPopup(markerTooltip(vehicle, gps, contract, collectionsCase, state))
-        .on("click", () => onPick(vehicle.id))
-        .addTo(group);
-      if (state !== "ONLINE") marker.bringToFront();
+    if (!d || !marker || !mapRef.current) return;
+
+    mapRef.current.flyTo(marker.getLatLng(), 15, {
+      animate: true,
+      duration: 0.7,
     });
-    return () => {
-      group.remove();
-    };
-  }, [cases, contracts, gpsDevices, onPick, vehicles]);
+
+    marker.bindPopup(popupHtml(d)).openPopup();
+  };
+
+  const findVehicle = () => {
+    const q = search.trim().toLowerCase();
+    if (!q) return;
+
+    const match = vehicles.find((v: any) => {
+      return (
+        String(v.id || "").toLowerCase().includes(q) ||
+        String(v.contract_id || "").toLowerCase().includes(q) ||
+        String(v.plate || "").toLowerCase().includes(q) ||
+        String(v.client || "").toLowerCase().includes(q)
+      );
+    });
+
+    if (!match?.id) {
+      alert("No vehicle found");
+      return;
+    }
+
+    openVehicle(String(match.id));
+  };
+
+  useEffect(() => {
+    vehiclesRef.current = new Map(
+      vehicles
+        .filter((v: any) => v?.id)
+        .map((v: any) => [String(v.id), v])
+    );
+  }, [vehicles]);
+
+  useEffect(() => {
+    if (mapRef.current) return;
+
+    const el = document.getElementById("map");
+    if (!el) return;
+
+    mapRef.current = L.map(el).setView([11.5564, 104.9282], 12);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "OSM",
+    }).addTo(mapRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const alive = new Set<string>();
+
+    vehicles.forEach((v: any) => {
+      if (!v?.id) return;
+
+      const vehicleId = String(v.id);
+      alive.add(vehicleId);
+
+      const existing = markersRef.current.get(vehicleId);
+
+      if (existing) {
+        existing.setLatLng([v.lat, v.lng]);
+        existing.setStyle({
+          color: getColor(v),
+        });
+        return;
+      }
+
+      const marker = L.circleMarker([v.lat, v.lng], {
+        radius: 7,
+        color: getColor(v),
+        fillOpacity: 0.85,
+      }).addTo(mapRef.current);
+
+      marker.on("click", () => {
+        const d = vehiclesRef.current.get(vehicleId);
+        if (!d) return;
+
+        console.log("GPS marker click", {
+          markerVehicleId: vehicleId,
+          latestVehicleId: d.id,
+          latestContractId: d.contract_id,
+          latestClient: d.client,
+          latestPlate: d.plate,
+          latestStatus: d.status,
+        });
+
+        marker.bindPopup(popupHtml(d)).openPopup();
+      });
+
+      markersRef.current.set(vehicleId, marker);
+    });
+
+    markersRef.current.forEach((marker, id) => {
+      if (!alive.has(id)) {
+        mapRef.current.removeLayer(marker);
+        markersRef.current.delete(id);
+      }
+    });
+  }, [vehicles]);
+
   return (
-    <div className={styles.frame}>
-      <div className={styles.map} ref={host} />
-      <div className={styles.legend} aria-label="GPS risk legend">
-        <span><i style={{ background: markerColors.online }} />online</span>
-        <span><i style={{ background: markerColors.warning }} />collection risk</span>
-        <span><i style={{ background: markerColors.armed }} />immobilizer armed</span>
+    <div style={{ height: "100%", width: "100%", position: "relative" }}>
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 1000,
+          background: "white",
+          borderRadius: 10,
+          padding: 10,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") findVehicle();
+          }}
+          placeholder="Find car: contract, plate, client"
+          style={{
+            width: 260,
+            padding: "9px 10px",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            fontSize: 14,
+          }}
+        />
+        <button
+          onClick={findVehicle}
+          style={{
+            padding: "9px 12px",
+            border: "1px solid #111",
+            borderRadius: 8,
+            background: "#111",
+            color: "white",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Find a car
+        </button>
       </div>
+
+      <div id="map" style={{ height: "100%", width: "100%" }} />
     </div>
   );
 }
