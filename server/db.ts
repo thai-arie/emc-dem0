@@ -72,6 +72,66 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS financial_partners (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    funding_type TEXT NOT NULL DEFAULT '',
+    cost_rate_pct REAL NOT NULL DEFAULT 0,
+    active_contracts_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS insurance_partners (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    premium_pct REAL NOT NULL DEFAULT 0,
+    commission_pct REAL NOT NULL DEFAULT 0,
+    settlement_timing TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+function seedFinanceReferenceIfEmpty() {
+  const at = new Date().toISOString();
+  const financialCount = (db.prepare("SELECT COUNT(*) AS count FROM financial_partners").get() as { count: number }).count;
+  if (!financialCount) {
+    const insertFinancial = db.prepare(`
+      INSERT INTO financial_partners (id, name, funding_type, cost_rate_pct, active_contracts_count, status, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    [
+      ["fp_icare", "iCare Leasing Plc", "Bank partner", 12, 18, "ACTIVE", "Primary co-funding partner for standard electric motorcycles."],
+      ["fp_acleda", "ACLEDA Bank", "Bank", 11, 12, "ACTIVE", "Lower cost funding; tighter file documentation expected."],
+      ["fp_wemoney", "WE.MONEY MFI", "MFI", 14, 7, "ACTIVE", "Useful for higher risk borrowers and smaller ticket sizes."],
+      ["fp-emc-self", "EMC Self-Funded", "Self-funded", 0, 4, "ACTIVE", "Internal capital allocation; keep separate in margin reporting."],
+      ["fp_chailease", "Chailease Royal", "Bank partner", 12.5, 0, "INACTIVE", "Reference-only until commercial terms are signed."]
+    ].forEach((partner) => insertFinancial.run(...partner, at, at));
+  }
+
+  const insuranceCount = (db.prepare("SELECT COUNT(*) AS count FROM insurance_partners").get() as { count: number }).count;
+  if (!insuranceCount) {
+    const insertInsurance = db.prepare(`
+      INSERT INTO insurance_partners (id, name, premium_pct, commission_pct, settlement_timing, status, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    [
+      ["ip_cb", "CB General Insurance", 2.9, 12, "Monthly pass-through", "ACTIVE", "Default package for standard financed vehicles."],
+      ["ip_forte", "Forte Insurance", 3.2, 10, "Monthly pass-through", "ACTIVE", "Higher premium, stronger claim network."],
+      ["ip_asia", "Asia Insurance Cambodia", 2.5, 15, "Monthly pass-through", "ACTIVE", "Lower premium pilot option."],
+      ["ip_manual", "Manual policy override", 0, 0, "Per contract", "INACTIVE", "Used only when insurance is handled outside EMC."]
+    ].forEach((partner) => insertInsurance.run(...partner, at, at));
+  }
+}
+
+seedFinanceReferenceIfEmpty();
+
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency_key ON payments(idempotency_key) WHERE idempotency_key IS NOT NULL");
 
 function tableSql(table: string) {

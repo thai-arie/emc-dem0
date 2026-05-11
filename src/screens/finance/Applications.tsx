@@ -8,7 +8,8 @@ import ApplicationDetailDrawer from "./ApplicationDetailDrawer";
 import { calculateDealPreview } from "./applicationDealMath";
 import type { ApplicationSignal, ApplicationStage, FinanceApplication } from "./applicationReferenceData";
 import { applicationStageLabels } from "./applicationReferenceData";
-import { financialPartners, insurancePartners, pricingTiers, type TrafficTone } from "./financeReferenceData";
+import { financialPartners as fallbackFinancialPartners, insurancePartners as fallbackInsurancePartners, pricingTiers, type FinancialPartner, type InsurancePartner, type TrafficTone } from "./financeReferenceData";
+import { toFinancialPartnerOption, toInsurancePartnerOption } from "./financePartnerAdapters";
 import { FinanceGate, FinancePill, FinanceSummaryStrip, FinanceTraffic, financeStyles } from "./FinanceReferenceShared";
 
 function signalFor(application: FinanceApplication): { label: ApplicationSignal; tone: TrafficTone } {
@@ -26,15 +27,15 @@ function stageTone(stage: ApplicationStage) {
   return applicationStageLabels[stage].toUpperCase();
 }
 
-function partnerName(id: string) {
-  return financialPartners.find((partner) => partner.id === id)?.partnerName ?? id;
+function partnerName(id: string, partners: FinancialPartner[]) {
+  return partners.find((partner) => partner.id === id)?.partnerName ?? id;
 }
 
 function tierName(id: string) {
   return pricingTiers.find((tier) => tier.id === id)?.tierName ?? id;
 }
 
-function financedAmount(application: FinanceApplication) {
+function financedAmount(application: FinanceApplication, partners: FinancialPartner[], insurers: InsurancePartner[]) {
   return calculateDealPreview({
     vehiclePrice: application.vehiclePrice,
     vehicleCost: application.vehicleCost,
@@ -44,9 +45,9 @@ function financedAmount(application: FinanceApplication) {
     aprPct: application.aprPct,
     gpsFeeGross: pricingTiers.find((tier) => tier.id === application.pricingTierId)?.gpsFee ?? 0,
     gpsCostGsm: 700,
-    insurancePct: insurancePartners.find((partner) => partner.id === application.insurancePartnerId)?.premiumPct ?? 0,
-    insuranceCommissionPct: insurancePartners.find((partner) => partner.id === application.insurancePartnerId)?.commissionPct ?? 0,
-    bankCostRatePct: financialPartners.find((partner) => partner.id === application.financialPartnerId)?.costRatePct ?? 0,
+    insurancePct: insurers.find((partner) => partner.id === application.insurancePartnerId)?.premiumPct ?? 0,
+    insuranceCommissionPct: insurers.find((partner) => partner.id === application.insurancePartnerId)?.commissionPct ?? 0,
+    bankCostRatePct: partners.find((partner) => partner.id === application.financialPartnerId)?.costRatePct ?? 0,
     bankFundingSharePct: application.bankFundingSharePct
   }).financedAmount;
 }
@@ -126,6 +127,8 @@ export default function Applications() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("edit");
   const [loaded, setLoaded] = useState<FinanceApplication[]>([]);
+  const [financialPartnerOptions, setFinancialPartnerOptions] = useState<FinancialPartner[]>(fallbackFinancialPartners);
+  const [insurancePartnerOptions, setInsurancePartnerOptions] = useState<InsurancePartner[]>(fallbackInsurancePartners);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const toast = useUi((state) => state.addToast);
@@ -133,8 +136,14 @@ export default function Applications() {
   const loadApplications = async () => {
     setLoading(true);
     try {
-      const result = await api.getApplications();
+      const [result, financialResult, insuranceResult] = await Promise.all([
+        api.getApplications(),
+        api.getFinancialPartners(),
+        api.getInsurancePartners()
+      ]);
       setLoaded(result.applications.map(fromRecord));
+      setFinancialPartnerOptions(financialResult.partners.map(toFinancialPartnerOption));
+      setInsurancePartnerOptions(insuranceResult.partners.map(toInsurancePartnerOption));
       setLoadError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load applications";
@@ -215,7 +224,7 @@ export default function Applications() {
             rows={applications}
             rowKey={(row) => row.id}
             onRowClick={openApplicationDrawer}
-            searchKey={(row) => `${row.id} ${row.clientFullName} ${row.vehicleBrand} ${row.vehicleModel} ${applicationStageLabels[row.stage]} ${tierName(row.pricingTierId)} ${partnerName(row.financialPartnerId)}`}
+            searchKey={(row) => `${row.id} ${row.clientFullName} ${row.vehicleBrand} ${row.vehicleModel} ${applicationStageLabels[row.stage]} ${tierName(row.pricingTierId)} ${partnerName(row.financialPartnerId, financialPartnerOptions)}`}
             filters={[
               { label: "Draft", predicate: (row) => row.stage === "DRAFT" },
               { label: "Docs", predicate: (row) => row.stage === "DOCS_PENDING" },
@@ -234,13 +243,23 @@ export default function Applications() {
               { key: "pricingTierId", header: "Tier", render: (row) => tierName(row.pricingTierId), csvValue: (row) => tierName(row.pricingTierId) },
               { key: "aprPct", header: "APR", render: (row) => <span className={financeStyles.number}>{row.aprPct.toFixed(1)}%</span>, sortValue: (row) => row.aprPct },
               { key: "downPaymentPct", header: "Down %", render: (row) => <span className={financeStyles.number}>{row.downPaymentPct.toFixed(1)}%</span>, sortValue: (row) => row.downPaymentPct },
-              { key: "financedAmount", header: "Financed amount", render: (row) => <span className={financeStyles.money}>{formatMoney(financedAmount(row))}</span>, csvValue: financedAmount, sortValue: financedAmount },
-              { key: "financialPartnerId", header: "Partner", render: (row) => <span className={financeStyles.tableText}>{partnerName(row.financialPartnerId)}</span>, csvValue: (row) => partnerName(row.financialPartnerId) },
+              { key: "financedAmount", header: "Financed amount", render: (row) => <span className={financeStyles.money}>{formatMoney(financedAmount(row, financialPartnerOptions, insurancePartnerOptions))}</span>, csvValue: (row) => financedAmount(row, financialPartnerOptions, insurancePartnerOptions), sortValue: (row) => financedAmount(row, financialPartnerOptions, insurancePartnerOptions) },
+              { key: "financialPartnerId", header: "Partner", render: (row) => <span className={financeStyles.tableText}>{partnerName(row.financialPartnerId, financialPartnerOptions)}</span>, csvValue: (row) => partnerName(row.financialPartnerId, financialPartnerOptions) },
               { key: "createdAt", header: "Created", render: (row) => formatDate(row.createdAt), sortValue: (row) => row.createdAt }
             ]}
           />
         </section>
-        {isDrawerOpen && selectedApplication ? <ApplicationDetailDrawer key={`${drawerMode}-${selectedApplication.id}`} mode={drawerMode} application={selectedApplication} onClose={closeApplicationDrawer} onSave={saveApplication} /> : null}
+        {isDrawerOpen && selectedApplication ? (
+          <ApplicationDetailDrawer
+            key={`${drawerMode}-${selectedApplication.id}`}
+            mode={drawerMode}
+            application={selectedApplication}
+            financialPartnerOptions={financialPartnerOptions}
+            insurancePartnerOptions={insurancePartnerOptions}
+            onClose={closeApplicationDrawer}
+            onSave={saveApplication}
+          />
+        ) : null}
       </div>
     </FinanceGate>
   );

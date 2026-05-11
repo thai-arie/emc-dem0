@@ -122,6 +122,7 @@ export interface CashflowRow {
 }
 
 export type ApplicationStageRecord = "DRAFT" | "DOCS_PENDING" | "BANK_REVIEW" | "READY_TO_SIGN" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type FinancePartnerStatusRecord = "ACTIVE" | "INACTIVE";
 
 export interface ApplicationRecord {
   id: string;
@@ -154,6 +155,34 @@ export interface ApplicationRecord {
 }
 
 export type ApplicationPayload = Omit<ApplicationRecord, "id" | "created_at" | "updated_at">;
+
+export interface FinancialPartnerRecord {
+  id: string;
+  name: string;
+  funding_type: string;
+  cost_rate_pct: number;
+  active_contracts_count: number;
+  status: FinancePartnerStatusRecord;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type FinancialPartnerPayload = Omit<FinancialPartnerRecord, "id" | "created_at" | "updated_at">;
+
+export interface InsurancePartnerRecord {
+  id: string;
+  name: string;
+  premium_pct: number;
+  commission_pct: number;
+  settlement_timing: string;
+  status: FinancePartnerStatusRecord;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type InsurancePartnerPayload = Omit<InsurancePartnerRecord, "id" | "created_at" | "updated_at">;
 
 export type CollectionsCaseRow = CollectionsCase & {
   client: string;
@@ -319,6 +348,28 @@ export const api = {
   getReportingSummary: () => request<ReportingSummaryResponse>("/reporting/summary"),
   getReportingAging: () => request<AgingRow[]>("/reporting/aging"),
   getReportingCashflow: () => request<CashflowRow[]>("/reporting/cashflow"),
+  getFinancialPartners: () => request<{ partners: FinancialPartnerRecord[] }>("/finance/financial-partners"),
+  createFinancialPartner: async (body: FinancialPartnerPayload) => {
+    const result = await request<FinancialPartnerRecord>("/finance/financial-partners", { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  updateFinancialPartner: async (id: string, body: FinancialPartnerPayload) => {
+    const result = await request<FinancialPartnerRecord>(`/finance/financial-partners/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  getInsurancePartners: () => request<{ partners: InsurancePartnerRecord[] }>("/finance/insurance-partners"),
+  createInsurancePartner: async (body: InsurancePartnerPayload) => {
+    const result = await request<InsurancePartnerRecord>("/finance/insurance-partners", { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  updateInsurancePartner: async (id: string, body: InsurancePartnerPayload) => {
+    const result = await request<InsurancePartnerRecord>(`/finance/insurance-partners/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
   getApplications: () => request<{ applications: ApplicationRecord[] }>("/applications"),
   getApplication: (id: string) => request<ApplicationRecord>(`/applications/${id}`),
   createApplication: async (body: ApplicationPayload) => {

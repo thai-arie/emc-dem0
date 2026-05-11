@@ -61,6 +61,30 @@ CREATE TABLE IF NOT EXISTS applications (
   rejected_reason TEXT
 );
 
+CREATE TABLE IF NOT EXISTS financial_partners (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  funding_type TEXT NOT NULL DEFAULT '',
+  cost_rate_pct REAL NOT NULL DEFAULT 0,
+  active_contracts_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE')),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS insurance_partners (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  premium_pct REAL NOT NULL DEFAULT 0,
+  commission_pct REAL NOT NULL DEFAULT 0,
+  settlement_timing TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE')),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS vehicles (
   id TEXT PRIMARY KEY,
   vin TEXT NOT NULL,

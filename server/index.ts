@@ -266,6 +266,7 @@ function cents(value: unknown) {
 }
 
 const applicationStages = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"] as const;
+const partnerStatuses = ["ACTIVE", "INACTIVE"] as const;
 
 function nullableText(value: unknown) {
   const next = String(value ?? "").trim();
@@ -325,6 +326,48 @@ function normalizeApplicationPayload(body: any, existing?: any) {
     notes: String(body.notes ?? existing?.notes ?? "").trim(),
     rejected_reason: nullableText(body.rejected_reason ?? existing?.rejected_reason)
   };
+}
+
+function validatePartnerStatus(value: unknown) {
+  const status = String(value || "").trim().toUpperCase();
+  return (partnerStatuses as readonly string[]).includes(status) ? status : null;
+}
+
+function normalizeFinancialPartnerPayload(body: any, existing?: any) {
+  return {
+    name: String(body.name ?? existing?.name ?? "").trim(),
+    funding_type: String(body.funding_type ?? existing?.funding_type ?? "").trim(),
+    cost_rate_pct: Number(body.cost_rate_pct ?? existing?.cost_rate_pct ?? 0),
+    active_contracts_count: Math.max(0, Math.round(Number(body.active_contracts_count ?? existing?.active_contracts_count ?? 0))),
+    status: validatePartnerStatus(body.status ?? existing?.status ?? "ACTIVE") ?? "ACTIVE",
+    notes: String(body.notes ?? existing?.notes ?? "").trim()
+  };
+}
+
+function validateFinancialPartnerPayload(payload: any) {
+  if (!payload.name) return "Partner name is required";
+  if (!Number.isFinite(payload.cost_rate_pct) || payload.cost_rate_pct < 0) return "Cost rate cannot be negative";
+  if (!(partnerStatuses as readonly string[]).includes(payload.status)) return "Invalid partner status";
+  return null;
+}
+
+function normalizeInsurancePartnerPayload(body: any, existing?: any) {
+  return {
+    name: String(body.name ?? existing?.name ?? "").trim(),
+    premium_pct: Number(body.premium_pct ?? existing?.premium_pct ?? 0),
+    commission_pct: Number(body.commission_pct ?? existing?.commission_pct ?? 0),
+    settlement_timing: String(body.settlement_timing ?? existing?.settlement_timing ?? "").trim(),
+    status: validatePartnerStatus(body.status ?? existing?.status ?? "ACTIVE") ?? "ACTIVE",
+    notes: String(body.notes ?? existing?.notes ?? "").trim()
+  };
+}
+
+function validateInsurancePartnerPayload(payload: any) {
+  if (!payload.name) return "Partner name is required";
+  if (!Number.isFinite(payload.premium_pct) || payload.premium_pct < 0) return "Premium cannot be negative";
+  if (!Number.isFinite(payload.commission_pct) || payload.commission_pct < 0) return "Commission cannot be negative";
+  if (!(partnerStatuses as readonly string[]).includes(payload.status)) return "Invalid partner status";
+  return null;
 }
 
 function installmentStatusForDate(installment: any, today = localDateKey(new Date())) {
@@ -974,6 +1017,110 @@ app.post("/auth/logout", (_req, res) => {
 });
 
 app.use(requireAuth);
+
+app.get("/finance/financial-partners", (_req, res) => {
+  res.json({ partners: rows<any>("SELECT * FROM financial_partners ORDER BY CASE status WHEN 'ACTIVE' THEN 0 ELSE 1 END, name") });
+});
+
+app.post("/finance/financial-partners", (req, res) => {
+  const at = nowIso();
+  const payload = normalizeFinancialPartnerPayload(req.body);
+  const validationError = validateFinancialPartnerPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const partner = { id: nextId("FP"), ...payload, created_at: at, updated_at: at };
+  db.prepare(`
+    INSERT INTO financial_partners (id, name, funding_type, cost_rate_pct, active_contracts_count, status, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    partner.id,
+    partner.name,
+    partner.funding_type,
+    partner.cost_rate_pct,
+    partner.active_contracts_count,
+    partner.status,
+    partner.notes,
+    partner.created_at,
+    partner.updated_at
+  );
+  res.status(201).json(partner);
+});
+
+app.patch("/finance/financial-partners/:id", (req, res) => {
+  const existing = row<any>("SELECT * FROM financial_partners WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "Financial partner not found" });
+  const at = nowIso();
+  const payload = normalizeFinancialPartnerPayload(req.body, existing);
+  const validationError = validateFinancialPartnerPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const partner = { ...existing, ...payload, updated_at: at };
+  db.prepare(`
+    UPDATE financial_partners
+    SET name = ?, funding_type = ?, cost_rate_pct = ?, active_contracts_count = ?, status = ?, notes = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    partner.name,
+    partner.funding_type,
+    partner.cost_rate_pct,
+    partner.active_contracts_count,
+    partner.status,
+    partner.notes,
+    partner.updated_at,
+    existing.id
+  );
+  res.json(partner);
+});
+
+app.get("/finance/insurance-partners", (_req, res) => {
+  res.json({ partners: rows<any>("SELECT * FROM insurance_partners ORDER BY CASE status WHEN 'ACTIVE' THEN 0 ELSE 1 END, name") });
+});
+
+app.post("/finance/insurance-partners", (req, res) => {
+  const at = nowIso();
+  const payload = normalizeInsurancePartnerPayload(req.body);
+  const validationError = validateInsurancePartnerPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const partner = { id: nextId("IP"), ...payload, created_at: at, updated_at: at };
+  db.prepare(`
+    INSERT INTO insurance_partners (id, name, premium_pct, commission_pct, settlement_timing, status, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    partner.id,
+    partner.name,
+    partner.premium_pct,
+    partner.commission_pct,
+    partner.settlement_timing,
+    partner.status,
+    partner.notes,
+    partner.created_at,
+    partner.updated_at
+  );
+  res.status(201).json(partner);
+});
+
+app.patch("/finance/insurance-partners/:id", (req, res) => {
+  const existing = row<any>("SELECT * FROM insurance_partners WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "Insurance partner not found" });
+  const at = nowIso();
+  const payload = normalizeInsurancePartnerPayload(req.body, existing);
+  const validationError = validateInsurancePartnerPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const partner = { ...existing, ...payload, updated_at: at };
+  db.prepare(`
+    UPDATE insurance_partners
+    SET name = ?, premium_pct = ?, commission_pct = ?, settlement_timing = ?, status = ?, notes = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    partner.name,
+    partner.premium_pct,
+    partner.commission_pct,
+    partner.settlement_timing,
+    partner.status,
+    partner.notes,
+    partner.updated_at,
+    existing.id
+  );
+  res.json(partner);
+});
 
 app.get("/applications", (_req, res) => {
   res.json({ applications: rows<any>("SELECT * FROM applications ORDER BY updated_at DESC, created_at DESC") });

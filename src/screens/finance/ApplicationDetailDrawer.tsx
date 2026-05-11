@@ -9,7 +9,15 @@ import ApplicationDealPreview from "./ApplicationDealPreview";
 import { calculateDealPreview, generateInstallmentSchedulePreview } from "./applicationDealMath";
 import type { FinanceApplication } from "./applicationReferenceData";
 import { applicationStageLabels } from "./applicationReferenceData";
-import { bankAccounts, financialPartners, insurancePartners, pricingTiers } from "./financeReferenceData";
+import {
+  bankAccounts,
+  financialPartners as fallbackFinancialPartners,
+  insurancePartners as fallbackInsurancePartners,
+  pricingTiers,
+  vehicleCatalog,
+  type FinancialPartner,
+  type InsurancePartner
+} from "./financeReferenceData";
 import { DetailField, financeStyles } from "./FinanceReferenceShared";
 
 type Draft = {
@@ -96,13 +104,29 @@ function toDraft(application: FinanceApplication): Draft {
   };
 }
 
-export default function ApplicationDetailDrawer({ application, mode = "edit", onClose, onSave }: { application: FinanceApplication; mode?: "create" | "edit"; onClose: () => void; onSave?: (payload: ApplicationPayload) => Promise<void> }) {
+export default function ApplicationDetailDrawer({
+  application,
+  mode = "edit",
+  financialPartnerOptions = fallbackFinancialPartners,
+  insurancePartnerOptions = fallbackInsurancePartners,
+  onClose,
+  onSave
+}: {
+  application: FinanceApplication;
+  mode?: "create" | "edit";
+  financialPartnerOptions?: FinancialPartner[];
+  insurancePartnerOptions?: InsurancePartner[];
+  onClose: () => void;
+  onSave?: (payload: ApplicationPayload) => Promise<void>;
+}) {
   const role = useAuth((state) => state.user?.role);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => toDraft(application));
+  const partnerOptions = financialPartnerOptions.length ? financialPartnerOptions : fallbackFinancialPartners;
+  const insurerOptions = insurancePartnerOptions.length ? insurancePartnerOptions : fallbackInsurancePartners;
   const selectedTier = pricingTiers.find((tier) => tier.id === draft.pricingTierId) ?? pricingTiers[0];
-  const selectedPartner = financialPartners.find((partner) => partner.id === draft.financialPartnerId) ?? financialPartners[0];
-  const selectedInsurance = insurancePartners.find((partner) => partner.id === draft.insurancePartnerId) ?? insurancePartners[0];
+  const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId) ?? partnerOptions[0];
+  const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId) ?? insurerOptions[0];
   const selectedAccount = bankAccounts.find((account) => account.id === draft.bankAccountId);
 
   const vehiclePrice = Math.max(0, Math.round(draft.vehiclePriceDollars * 100));
@@ -183,6 +207,30 @@ export default function ApplicationDetailDrawer({ application, mode = "edit", on
         ...current,
         downPaymentPct,
         downPaymentDollars: amountFromPct(current.vehiclePriceDollars, downPaymentPct)
+      };
+    });
+  };
+
+  const updateVehicleCatalog = (vehicleCatalogId: string) => {
+    const selected = vehicleCatalog.find((item) => item.id === vehicleCatalogId);
+    if (!selected) {
+      setDraft((current) => ({ ...current, vehicleCatalogId: "" }));
+      return;
+    }
+
+    const vehiclePriceDollars = Math.round(selected.defaultSalePrice / 100);
+    setDraft((current) => {
+      const downPaymentDollars = clamp(current.downPaymentDollars, 0, vehiclePriceDollars);
+      return {
+        ...current,
+        vehicleCatalogId: selected.id,
+        vehicleBrand: selected.brand,
+        vehicleModel: selected.model,
+        vehicleYear: selected.year,
+        vehiclePriceDollars,
+        vehicleCostDollars: Math.round(selected.defaultVehicleCost / 100),
+        downPaymentDollars,
+        downPaymentPct: pctFromAmount(downPaymentDollars, vehiclePriceDollars)
       };
     });
   };
@@ -272,7 +320,14 @@ export default function ApplicationDetailDrawer({ application, mode = "edit", on
           <div className={financeStyles.controlGrid}>
             <label>
               <span>Catalog reference</span>
-              <input value={draft.vehicleCatalogId} onChange={(event) => updateText("vehicleCatalogId", event.target.value)} />
+              <select value={draft.vehicleCatalogId} onChange={(event) => updateVehicleCatalog(event.target.value)}>
+                <option value="">Manual / not selected</option>
+                {vehicleCatalog.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.brand} {item.model} {item.year} - {formatMoney(item.defaultSalePrice)}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               <span>Vehicle year</span>
@@ -331,7 +386,7 @@ export default function ApplicationDetailDrawer({ application, mode = "edit", on
             <label>
               <span>Financial partner</span>
               <select value={draft.financialPartnerId} onChange={(event) => setDraft((current) => ({ ...current, financialPartnerId: event.target.value }))}>
-                {financialPartners.map((partner) => (
+                {partnerOptions.map((partner) => (
                   <option key={partner.id} value={partner.id}>
                     {partner.partnerName}
                   </option>
@@ -341,7 +396,7 @@ export default function ApplicationDetailDrawer({ application, mode = "edit", on
             <label>
               <span>Insurance partner</span>
               <select value={draft.insurancePartnerId} onChange={(event) => setDraft((current) => ({ ...current, insurancePartnerId: event.target.value }))}>
-                {insurancePartners.map((partner) => (
+                {insurerOptions.map((partner) => (
                   <option key={partner.id} value={partner.id}>
                     {partner.insurer}
                   </option>
