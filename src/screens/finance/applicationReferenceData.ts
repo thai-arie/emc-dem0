@@ -1,4 +1,4 @@
-export type ApplicationStage = "docs" | "bank_review" | "ready_to_sign" | "approved" | "rejected";
+export type ApplicationStage = "DRAFT" | "DOCS_PENDING" | "BANK_REVIEW" | "READY_TO_SIGN" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type ApplicationSignal = "READY" | "WATCH" | "BLOCKED" | "APPROVED" | "REJECTED";
 
 export interface FinanceApplication {
@@ -13,6 +13,7 @@ export interface FinanceApplication {
   vehicleYear: number;
   vehiclePrice: number;
   vehicleCost: number;
+  downPaymentAmount?: number;
   downPaymentPct: number;
   termMonths: number;
   aprPct: number;
@@ -21,21 +22,26 @@ export interface FinanceApplication {
   insurancePartnerId: string;
   bankAccountId: string;
   bankFundingSharePct: number;
+  bankFundedAmount?: number;
+  emcFundedAmount?: number;
   settlementMode: "partner_pass_through" | "emc_buffer" | "self_funded";
   closureMode: "standard_signing" | "dealer_close" | "bank_close";
   startDate: string;
   notes: string;
   stage: ApplicationStage;
   createdAt: string;
+  rejectedReason?: string;
   blockedReason?: string;
 }
 
 export const applicationStageLabels: Record<ApplicationStage, string> = {
-  docs: "Docs",
-  bank_review: "Bank review",
-  ready_to_sign: "Ready to sign",
-  approved: "Approved",
-  rejected: "Rejected"
+  DRAFT: "Draft",
+  DOCS_PENDING: "Docs pending",
+  BANK_REVIEW: "Bank review",
+  READY_TO_SIGN: "Ready to sign",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  CANCELLED: "Cancelled"
 };
 
 export const applicationPipeline: FinanceApplication[] = [
@@ -63,7 +69,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "standard_signing",
     startDate: "2026-06-01",
     notes: "Income documents received. Waiting for final employer confirmation.",
-    stage: "bank_review",
+    stage: "BANK_REVIEW",
     createdAt: "2026-05-04T03:20:00.000Z"
   },
   {
@@ -90,7 +96,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "bank_close",
     startDate: "2026-06-05",
     notes: "Bank review passed. Signing package can be prepared after vehicle inspection.",
-    stage: "ready_to_sign",
+    stage: "READY_TO_SIGN",
     createdAt: "2026-05-02T05:45:00.000Z"
   },
   {
@@ -117,7 +123,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "dealer_close",
     startDate: "2026-06-10",
     notes: "Commercial use case. Risk tier requires bank committee review.",
-    stage: "bank_review",
+    stage: "BANK_REVIEW",
     createdAt: "2026-05-06T02:10:00.000Z"
   },
   {
@@ -144,7 +150,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "bank_close",
     startDate: "2026-06-15",
     notes: "Prime borrower profile. Approved for premium pricing reference.",
-    stage: "approved",
+    stage: "APPROVED",
     createdAt: "2026-04-29T08:35:00.000Z"
   },
   {
@@ -171,7 +177,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "standard_signing",
     startDate: "2026-06-08",
     notes: "Missing proof of address. Intake should not progress until document gap closes.",
-    stage: "docs",
+    stage: "DOCS_PENDING",
     createdAt: "2026-05-08T04:15:00.000Z",
     blockedReason: "Proof of address missing"
   },
@@ -199,7 +205,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "standard_signing",
     startDate: "2026-06-12",
     notes: "Docs package open. Waiting for income verification and guarantor contact.",
-    stage: "docs",
+    stage: "DOCS_PENDING",
     createdAt: "2026-05-07T06:05:00.000Z"
   },
   {
@@ -226,7 +232,7 @@ export const applicationPipeline: FinanceApplication[] = [
     closureMode: "dealer_close",
     startDate: "2026-05-20",
     notes: "Rejected reference case. Income volatility and inactive stock unit.",
-    stage: "rejected",
+    stage: "REJECTED",
     createdAt: "2026-04-25T07:25:00.000Z"
   }
 ];

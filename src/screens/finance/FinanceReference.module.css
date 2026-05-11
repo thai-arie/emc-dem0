@@ -222,7 +222,8 @@
 }
 
 .controlGrid input,
-.controlGrid select {
+.controlGrid select,
+.controlGrid textarea {
   min-width: 0;
   border: 1px solid rgba(126, 166, 201, 0.22);
   border-radius: var(--radius);
@@ -231,6 +232,37 @@
   padding: 9px 10px;
   font: inherit;
   font-weight: 780;
+}
+
+.controlGrid textarea {
+  min-height: 76px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.fullWidthControl {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fullWidthControl textarea {
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid rgba(126, 166, 201, 0.22);
+  border-radius: var(--radius);
+  background: rgba(4, 10, 20, 0.78);
+  color: var(--color-text);
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 780;
+  line-height: 1.35;
+  resize: vertical;
 }
 
 .downPaymentPair {
@@ -303,6 +335,35 @@
   color: var(--color-muted);
   padding: 8px 10px;
   font-weight: 850;
+}
+
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(56, 216, 196, 0.22);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(7, 19, 34, 0.98), rgba(4, 10, 20, 0.98));
+  box-shadow: 0 -18px 42px rgba(0, 0, 0, 0.34);
+  padding: 11px 12px;
+}
+
+.saveBar > span {
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.saveBar > div {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .conversionSubsection {
@@ -389,10 +450,67 @@
   border-bottom: 0;
 }
 
+.compositionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.compactPanel {
+  min-width: 0;
+  border: 1px solid rgba(126, 166, 201, 0.16);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(5, 11, 22, 0.42), rgba(5, 11, 22, 0.2));
+  padding: 12px;
+}
+
+.compactPanel h3 {
+  margin: 0 0 10px;
+  color: var(--color-muted-strong);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.opsBridgeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.opsBridgeItem {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(126, 166, 201, 0.16);
+  border-radius: var(--radius);
+  background: rgba(5, 11, 22, 0.28);
+  padding: 12px;
+}
+
+.opsBridgeItem strong {
+  color: var(--color-text);
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 920;
+  font-variant-numeric: tabular-nums;
+}
+
+.opsBridgeItem span:last-child {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
 @media (max-width: 760px) {
   .detailGridTwo,
   .controlGrid,
-  .previewGrid {
+  .previewGrid,
+  .compositionGrid,
+  .opsBridgeGrid {
     grid-template-columns: 1fr;
   }
 }

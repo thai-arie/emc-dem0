@@ -23,6 +23,7 @@ const operations: SidebarEntry[] = [
 
 const finance: SidebarEntry[] = [
   { label: "Applications", to: "/finance/applications" },
+  { label: "Portfolio", to: "/finance/portfolio" },
   { label: "Vehicle Catalog", to: "/finance/vehicle-catalog" },
   { label: "Pricing Tiers", to: "/finance/pricing-tiers" },
   { label: "Financial Partners", to: "/finance/financial-partners" },

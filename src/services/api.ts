@@ -1,4 +1,3 @@
-const BASE_URL = "http://127.0.0.1:4000";
 import { useEffect, useState } from "react";
 import type { Alert, AuditEntry, Client, CollectionAction, CollectionsCase, Contract, GPSCommand, GPSDevice, Installment, Payment, Role, Vehicle } from "../entities/types";
 
@@ -10,11 +9,14 @@ export interface ActorPayload {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API}${path}`, {
+  const url = path.startsWith("http") ? path : `${API}${path}`;
+
+  const response = await fetch(url, {
     ...init,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
   });
+
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: response.statusText }));
     if (response.status === 401) {
@@ -23,6 +25,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(body.error || response.statusText);
   }
+
   return response.json() as Promise<T>;
 }
 
@@ -117,6 +120,40 @@ export interface CashflowRow {
   amount_collected: number;
   payment_count: number;
 }
+
+export type ApplicationStageRecord = "DRAFT" | "DOCS_PENDING" | "BANK_REVIEW" | "READY_TO_SIGN" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export interface ApplicationRecord {
+  id: string;
+  client_full_name: string;
+  client_phone: string;
+  client_national_id: string | null;
+  vehicle_catalog_id: string | null;
+  vehicle_brand: string;
+  vehicle_model: string;
+  vehicle_year: number | null;
+  vehicle_price_cents: number;
+  vehicle_cost_cents: number | null;
+  down_payment_cents: number;
+  down_payment_pct: number;
+  term_months: number;
+  apr_pct: number;
+  pricing_tier_id: string | null;
+  financial_partner_id: string | null;
+  insurance_partner_id: string | null;
+  bank_account_id: string | null;
+  bank_funded_amount_cents: number | null;
+  emc_funded_amount_cents: number | null;
+  settlement_mode: string;
+  closure_mode: string;
+  stage: ApplicationStageRecord;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  rejected_reason: string | null;
+}
+
+export type ApplicationPayload = Omit<ApplicationRecord, "id" | "created_at" | "updated_at">;
 
 export type CollectionsCaseRow = CollectionsCase & {
   client: string;
@@ -282,6 +319,18 @@ export const api = {
   getReportingSummary: () => request<ReportingSummaryResponse>("/reporting/summary"),
   getReportingAging: () => request<AgingRow[]>("/reporting/aging"),
   getReportingCashflow: () => request<CashflowRow[]>("/reporting/cashflow"),
+  getApplications: () => request<{ applications: ApplicationRecord[] }>("/applications"),
+  getApplication: (id: string) => request<ApplicationRecord>(`/applications/${id}`),
+  createApplication: async (body: ApplicationPayload) => {
+    const result = await request<ApplicationRecord>("/applications", { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  updateApplication: async (id: string, body: ApplicationPayload) => {
+    const result = await request<ApplicationRecord>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
   getAudit: () => request<AuditEntry[]>("/audit")
 };
 

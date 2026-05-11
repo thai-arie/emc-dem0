@@ -3,6 +3,7 @@ import Drawer from "../../components/Drawer";
 import type { Role } from "../../entities/types";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
+import type { ApplicationPayload } from "../../services/api";
 import { useAuth } from "../../store/auth";
 import ApplicationDealPreview from "./ApplicationDealPreview";
 import { calculateDealPreview, generateInstallmentSchedulePreview } from "./applicationDealMath";
@@ -12,7 +13,15 @@ import { bankAccounts, financialPartners, insurancePartners, pricingTiers } from
 import { DetailField, financeStyles } from "./FinanceReferenceShared";
 
 type Draft = {
+  clientFullName: string;
+  clientPhone: string;
+  clientNationalId: string;
+  vehicleCatalogId: string;
+  vehicleBrand: string;
+  vehicleModel: string;
+  vehicleYear: number;
   vehiclePriceDollars: number;
+  vehicleCostDollars: number;
   downPaymentDollars: number;
   downPaymentPct: number;
   termMonths: number;
@@ -20,6 +29,12 @@ type Draft = {
   pricingTierId: string;
   financialPartnerId: string;
   insurancePartnerId: string;
+  bankAccountId: string;
+  stage: FinanceApplication["stage"];
+  settlementMode: FinanceApplication["settlementMode"];
+  closureMode: FinanceApplication["closureMode"];
+  notes: string;
+  rejectedReason: string;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -52,34 +67,52 @@ function formatPreviewDate(value: string) {
 
 function toDraft(application: FinanceApplication): Draft {
   const vehiclePriceDollars = Math.round(application.vehiclePrice / 100);
+  const vehicleCostDollars = Math.round(application.vehicleCost / 100);
   const downPaymentPct = clamp(application.downPaymentPct, 0, 100);
+  const downPaymentDollars = Math.round((application.downPaymentAmount ?? amountFromPct(vehiclePriceDollars, downPaymentPct) * 100) / 100);
   return {
+    clientFullName: application.clientFullName,
+    clientPhone: application.clientPhone,
+    clientNationalId: application.clientNationalId,
+    vehicleCatalogId: application.vehicleCatalogId,
+    vehicleBrand: application.vehicleBrand,
+    vehicleModel: application.vehicleModel,
+    vehicleYear: application.vehicleYear,
     vehiclePriceDollars,
-    downPaymentDollars: amountFromPct(vehiclePriceDollars, downPaymentPct),
+    vehicleCostDollars,
+    downPaymentDollars,
     downPaymentPct,
     termMonths: application.termMonths,
     aprPct: application.aprPct,
     pricingTierId: application.pricingTierId,
     financialPartnerId: application.financialPartnerId,
-    insurancePartnerId: application.insurancePartnerId
+    insurancePartnerId: application.insurancePartnerId,
+    bankAccountId: application.bankAccountId,
+    stage: application.stage,
+    settlementMode: application.settlementMode,
+    closureMode: application.closureMode,
+    notes: application.notes,
+    rejectedReason: application.rejectedReason ?? ""
   };
 }
 
-export default function ApplicationDetailDrawer({ application, onClose }: { application: FinanceApplication; onClose: () => void }) {
+export default function ApplicationDetailDrawer({ application, mode = "edit", onClose, onSave }: { application: FinanceApplication; mode?: "create" | "edit"; onClose: () => void; onSave?: (payload: ApplicationPayload) => Promise<void> }) {
   const role = useAuth((state) => state.user?.role);
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => toDraft(application));
   const selectedTier = pricingTiers.find((tier) => tier.id === draft.pricingTierId) ?? pricingTiers[0];
   const selectedPartner = financialPartners.find((partner) => partner.id === draft.financialPartnerId) ?? financialPartners[0];
   const selectedInsurance = insurancePartners.find((partner) => partner.id === draft.insurancePartnerId) ?? insurancePartners[0];
-  const selectedAccount = bankAccounts.find((account) => account.id === application.bankAccountId);
+  const selectedAccount = bankAccounts.find((account) => account.id === draft.bankAccountId);
 
   const vehiclePrice = Math.max(0, Math.round(draft.vehiclePriceDollars * 100));
+  const vehicleCost = Math.max(0, Math.round(draft.vehicleCostDollars * 100));
   const fundingShare = selectedPartner.fundingType === "Self-funded" ? 0 : application.bankFundingSharePct;
   const preview = useMemo(
     () =>
       calculateDealPreview({
         vehiclePrice,
-        vehicleCost: application.vehicleCost,
+        vehicleCost,
         downPaymentAmount: Math.round(draft.downPaymentDollars * 100),
         downPaymentPct: draft.downPaymentPct,
         termMonths: draft.termMonths,
@@ -91,7 +124,7 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
         bankCostRatePct: selectedPartner.costRatePct,
         bankFundingSharePct: fundingShare
       }),
-    [application.vehicleCost, draft.aprPct, draft.downPaymentPct, draft.termMonths, fundingShare, selectedInsurance.commissionPct, selectedInsurance.premiumPct, selectedPartner.costRatePct, selectedTier.gpsFee, vehiclePrice]
+    [draft.aprPct, draft.downPaymentDollars, draft.downPaymentPct, draft.termMonths, fundingShare, selectedInsurance.commissionPct, selectedInsurance.premiumPct, selectedPartner.costRatePct, selectedTier.gpsFee, vehicleCost, vehiclePrice]
   );
   const installmentPreview = useMemo(
     () =>
@@ -110,6 +143,10 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
   const updateSimpleNumber = (key: keyof Pick<Draft, "termMonths" | "aprPct">, value: string) => {
     const parsed = Number(value);
     setDraft((current) => ({ ...current, [key]: Number.isFinite(parsed) ? parsed : 0 }));
+  };
+
+  const updateText = (key: keyof Pick<Draft, "clientFullName" | "clientPhone" | "clientNationalId" | "vehicleCatalogId" | "vehicleBrand" | "vehicleModel" | "bankAccountId" | "notes" | "rejectedReason">, value: string) => {
+    setDraft((current) => ({ ...current, [key]: value }));
   };
 
   const updateVehiclePrice = (value: string) => {
@@ -162,26 +199,93 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
     }));
   };
 
+  const buildPayload = (): ApplicationPayload => ({
+    client_full_name: draft.clientFullName,
+    client_phone: draft.clientPhone,
+    client_national_id: draft.clientNationalId || null,
+    vehicle_catalog_id: draft.vehicleCatalogId || null,
+    vehicle_brand: draft.vehicleBrand,
+    vehicle_model: draft.vehicleModel,
+    vehicle_year: draft.vehicleYear || null,
+    vehicle_price_cents: preview.vehiclePrice,
+    vehicle_cost_cents: preview.vehicleCost,
+    down_payment_cents: preview.downPayment,
+    down_payment_pct: draft.downPaymentPct,
+    term_months: draft.termMonths,
+    apr_pct: draft.aprPct,
+    pricing_tier_id: draft.pricingTierId || null,
+    financial_partner_id: draft.financialPartnerId || null,
+    insurance_partner_id: draft.insurancePartnerId || null,
+    bank_account_id: draft.bankAccountId || null,
+    bank_funded_amount_cents: preview.bankFundedAmount,
+    emc_funded_amount_cents: preview.emcFundedAmount,
+    settlement_mode: draft.settlementMode,
+    closure_mode: draft.closureMode,
+    stage: draft.stage,
+    notes: draft.notes,
+    rejected_reason: draft.rejectedReason || null
+  });
+
+  const save = async () => {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      await onSave(buildPayload());
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Drawer title={`${application.id} - ${application.clientFullName}`} onClose={onClose}>
+    <Drawer title={`${mode === "create" ? "New Application" : application.id} - ${draft.clientFullName || "Partner intake"}`} onClose={onClose}>
       <div className={financeStyles.drawerStack}>
         <section className={financeStyles.drawerSection}>
           <h3>Client</h3>
-          <div className={financeStyles.detailGridTwo}>
-            <DetailField label="Client" value={application.clientFullName} />
-            <DetailField label="Phone" value={application.clientPhone} />
-            <DetailField label="National ID" value={application.clientNationalId} />
-            <DetailField label="Address" value={application.clientAddress} />
+          <div className={financeStyles.controlGrid}>
+            <label>
+              <span>Client full name</span>
+              <input value={draft.clientFullName} onChange={(event) => updateText("clientFullName", event.target.value)} />
+            </label>
+            <label>
+              <span>Phone</span>
+              <input value={draft.clientPhone} onChange={(event) => updateText("clientPhone", event.target.value)} />
+            </label>
+            <label>
+              <span>National ID / passport</span>
+              <input value={draft.clientNationalId} onChange={(event) => updateText("clientNationalId", event.target.value)} />
+            </label>
+            <label>
+              <span>Stage</span>
+              <select value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as FinanceApplication["stage"] }))}>
+                {Object.entries(applicationStageLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </section>
 
         <section className={financeStyles.drawerSection}>
           <h3>Vehicle</h3>
-          <div className={financeStyles.detailGridTwo}>
-            <DetailField label="Vehicle" value={`${application.vehicleYear} ${application.vehicleBrand} ${application.vehicleModel}`} />
-            <DetailField label="Catalog reference" value={application.vehicleCatalogId} />
-            <DetailField label="Current stage" value={applicationStageLabels[application.stage]} />
-            <DetailField label="Created" value={formatDate(application.createdAt)} />
+          <div className={financeStyles.controlGrid}>
+            <label>
+              <span>Catalog reference</span>
+              <input value={draft.vehicleCatalogId} onChange={(event) => updateText("vehicleCatalogId", event.target.value)} />
+            </label>
+            <label>
+              <span>Vehicle year</span>
+              <input type="number" min="0" value={draft.vehicleYear} onChange={(event) => setDraft((current) => ({ ...current, vehicleYear: Math.round(Number(event.target.value || 0)) }))} />
+            </label>
+            <label>
+              <span>Brand</span>
+              <input value={draft.vehicleBrand} onChange={(event) => updateText("vehicleBrand", event.target.value)} />
+            </label>
+            <label>
+              <span>Model</span>
+              <input value={draft.vehicleModel} onChange={(event) => updateText("vehicleModel", event.target.value)} />
+            </label>
           </div>
         </section>
 
@@ -191,6 +295,10 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
             <label>
               <span>Vehicle price</span>
               <input type="number" min="0" value={draft.vehiclePriceDollars} onChange={(event) => updateVehiclePrice(event.target.value)} />
+            </label>
+            <label>
+              <span>Vehicle cost</span>
+              <input type="number" min="0" value={draft.vehicleCostDollars} onChange={(event) => setDraft((current) => ({ ...current, vehicleCostDollars: Math.max(0, Number(event.target.value || 0)) }))} />
             </label>
             <div className={financeStyles.downPaymentPair}>
               <label>
@@ -240,6 +348,16 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
                 ))}
               </select>
             </label>
+            <label>
+              <span>Bank account</span>
+              <select value={draft.bankAccountId} onChange={(event) => updateText("bankAccountId", event.target.value)}>
+                {bankAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.accountName}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <p className={financeStyles.note}>Simulation only. Closing this drawer discards changes and does not create a contract, payment, GPS device, collections case, or audit log.</p>
         </section>
@@ -259,8 +377,8 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
           <div className={financeStyles.detailGridTwo}>
             <DetailField label="Bank funded estimate" value={formatMoney(preview.bankFundedAmount)} />
             <DetailField label="EMC funded estimate" value={formatMoney(preview.emcFundedAmount)} />
-            <DetailField label="Settlement mode" value={application.settlementMode} />
-            <DetailField label="Closure mode" value={application.closureMode} />
+            <DetailField label="Settlement mode" value={draft.settlementMode} />
+            <DetailField label="Closure mode" value={draft.closureMode} />
           </div>
         </section>
 
@@ -274,8 +392,8 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
           <p className={financeStyles.note}>No contract is created in this demo phase. Operational workflows remain inactive until real backend approval is implemented.</p>
           <div className={financeStyles.detailGridTwo}>
             <DetailField label="Preview contract ID" value="KT-PREVIEW" />
-            <DetailField label="Client" value={application.clientFullName} />
-            <DetailField label="Vehicle" value={`${application.vehicleBrand} ${application.vehicleModel}`} />
+            <DetailField label="Client" value={draft.clientFullName} />
+            <DetailField label="Vehicle" value={`${draft.vehicleBrand} ${draft.vehicleModel}`} />
             <DetailField label="Sale price" value={formatMoney(preview.vehiclePrice)} />
             <DetailField label="Down payment amount" value={formatMoney(preview.downPayment)} />
             <DetailField label="Down payment %" value={`${draft.downPaymentPct.toFixed(2)}%`} />
@@ -338,7 +456,14 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
 
         <section className={financeStyles.drawerSection}>
           <h3>Internal notes</h3>
-          <p className={financeStyles.note}>{application.blockedReason ? `${application.blockedReason}. ${application.notes}` : application.notes}</p>
+          <label className={financeStyles.fullWidthControl}>
+            <span>Notes</span>
+            <textarea value={draft.notes} onChange={(event) => updateText("notes", event.target.value)} />
+          </label>
+          <label className={financeStyles.fullWidthControl}>
+            <span>Rejected reason</span>
+            <textarea value={draft.rejectedReason} onChange={(event) => updateText("rejectedReason", event.target.value)} />
+          </label>
         </section>
 
         <section className={financeStyles.drawerSection}>
@@ -349,6 +474,13 @@ export default function ApplicationDetailDrawer({ application, onClose }: { appl
             <button disabled>Request more docs - future</button>
           </div>
         </section>
+        <div className={financeStyles.saveBar}>
+          <span>{mode === "create" ? "Creates an application record only. No contract or operational workflow is created." : `Last updated ${formatDate(application.createdAt)}`}</span>
+          <div>
+            <button className="secondary-button" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="button" className="primary-button" onClick={save} disabled={saving || !onSave}>{saving ? "Saving..." : "Save application"}</button>
+          </div>
+        </div>
       </div>
     </Drawer>
   );

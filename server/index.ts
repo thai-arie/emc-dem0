@@ -265,6 +265,68 @@ function cents(value: unknown) {
   return Math.round(Number(value || 0));
 }
 
+const applicationStages = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"] as const;
+
+function nullableText(value: unknown) {
+  const next = String(value ?? "").trim();
+  return next || null;
+}
+
+function numberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const next = Number(value);
+  return Number.isFinite(next) ? next : null;
+}
+
+function validateApplicationRecord(payload: any) {
+  if (!String(payload.client_full_name || "").trim()) return "Client name is required";
+  if (Number(payload.vehicle_price_cents) < 0) return "Vehicle price must be greater than or equal to 0";
+  if (Number(payload.down_payment_cents) < 0) return "Down payment must be greater than or equal to 0";
+  if (Number(payload.down_payment_cents) > Number(payload.vehicle_price_cents)) return "Down payment cannot exceed vehicle price";
+  if (Number(payload.apr_pct) < 0) return "APR must be greater than or equal to 0";
+  if (Number(payload.term_months) <= 0) return "Term months must be greater than 0";
+  if (!(applicationStages as readonly string[]).includes(payload.stage)) return "Invalid application stage";
+  return null;
+}
+
+function normalizeApplicationPayload(body: any, existing?: any) {
+  const vehiclePrice = cents(body.vehicle_price_cents ?? existing?.vehicle_price_cents ?? 0);
+  const downPayment = cents(body.down_payment_cents ?? existing?.down_payment_cents ?? 0);
+  const downPaymentPct =
+    body.down_payment_pct !== undefined
+      ? Number(body.down_payment_pct)
+      : vehiclePrice > 0
+        ? Number(((downPayment / vehiclePrice) * 100).toFixed(2))
+        : Number(existing?.down_payment_pct ?? 0);
+
+  return {
+    client_full_name: String(body.client_full_name ?? existing?.client_full_name ?? "").trim(),
+    client_phone: String(body.client_phone ?? existing?.client_phone ?? "").trim(),
+    client_national_id: nullableText(body.client_national_id ?? existing?.client_national_id),
+    vehicle_catalog_id: nullableText(body.vehicle_catalog_id ?? existing?.vehicle_catalog_id),
+    vehicle_brand: String(body.vehicle_brand ?? existing?.vehicle_brand ?? "").trim(),
+    vehicle_model: String(body.vehicle_model ?? existing?.vehicle_model ?? "").trim(),
+    vehicle_year: numberOrNull(body.vehicle_year ?? existing?.vehicle_year),
+    vehicle_price_cents: vehiclePrice,
+    vehicle_cost_cents: numberOrNull(body.vehicle_cost_cents ?? existing?.vehicle_cost_cents),
+    down_payment_cents: downPayment,
+    down_payment_pct: downPaymentPct,
+    term_months: Math.round(Number(body.term_months ?? existing?.term_months ?? 1)),
+    apr_pct: Number(body.apr_pct ?? existing?.apr_pct ?? 0),
+    pricing_tier_id: nullableText(body.pricing_tier_id ?? existing?.pricing_tier_id),
+    financial_partner_id: nullableText(body.financial_partner_id ?? existing?.financial_partner_id),
+    insurance_partner_id: nullableText(body.insurance_partner_id ?? existing?.insurance_partner_id),
+    bank_account_id: nullableText(body.bank_account_id ?? existing?.bank_account_id),
+    bank_funded_amount_cents: numberOrNull(body.bank_funded_amount_cents ?? existing?.bank_funded_amount_cents),
+    emc_funded_amount_cents: numberOrNull(body.emc_funded_amount_cents ?? existing?.emc_funded_amount_cents),
+    settlement_mode: String(body.settlement_mode ?? existing?.settlement_mode ?? "partner_pass_through").trim(),
+    closure_mode: String(body.closure_mode ?? existing?.closure_mode ?? "standard_signing").trim(),
+    stage: String(body.stage ?? existing?.stage ?? "DRAFT").trim().toUpperCase(),
+    notes: String(body.notes ?? existing?.notes ?? "").trim(),
+    rejected_reason: nullableText(body.rejected_reason ?? existing?.rejected_reason)
+  };
+}
+
 function installmentStatusForDate(installment: any, today = localDateKey(new Date())) {
   if (installment.status === "PAID" || installment.status === "CANCELLED_BY_PREPAYMENT") return installment.status;
   const dueDate = localDateKey(installment.due_date);
@@ -912,6 +974,142 @@ app.post("/auth/logout", (_req, res) => {
 });
 
 app.use(requireAuth);
+
+app.get("/applications", (_req, res) => {
+  res.json({ applications: rows<any>("SELECT * FROM applications ORDER BY updated_at DESC, created_at DESC") });
+});
+
+app.get("/applications/:id", (req, res) => {
+  const application = row<any>("SELECT * FROM applications WHERE id = ?", [req.params.id]);
+  if (!application) return res.status(404).json({ error: "Application not found" });
+  res.json(application);
+});
+
+app.post("/applications", (req, res) => {
+  const a = actor(req);
+  const at = nowIso();
+  const payload = normalizeApplicationPayload(req.body);
+  const validationError = validateApplicationRecord(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const id = nextId("APP");
+  const application = { id, ...payload, created_at: at, updated_at: at };
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO applications (
+        id, client_full_name, client_phone, client_national_id, vehicle_catalog_id,
+        vehicle_brand, vehicle_model, vehicle_year, vehicle_price_cents, vehicle_cost_cents,
+        down_payment_cents, down_payment_pct, term_months, apr_pct, pricing_tier_id,
+        financial_partner_id, insurance_partner_id, bank_account_id, bank_funded_amount_cents,
+        emc_funded_amount_cents, settlement_mode, closure_mode, stage, notes,
+        created_at, updated_at, rejected_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      application.id,
+      application.client_full_name,
+      application.client_phone,
+      application.client_national_id,
+      application.vehicle_catalog_id,
+      application.vehicle_brand,
+      application.vehicle_model,
+      application.vehicle_year,
+      application.vehicle_price_cents,
+      application.vehicle_cost_cents,
+      application.down_payment_cents,
+      application.down_payment_pct,
+      application.term_months,
+      application.apr_pct,
+      application.pricing_tier_id,
+      application.financial_partner_id,
+      application.insurance_partner_id,
+      application.bank_account_id,
+      application.bank_funded_amount_cents,
+      application.emc_funded_amount_cents,
+      application.settlement_mode,
+      application.closure_mode,
+      application.stage,
+      application.notes,
+      application.created_at,
+      application.updated_at,
+      application.rejected_reason
+    );
+    audit(a.actor_id, a.actor_role, "application", id, "application.created", null, application);
+  })();
+  res.status(201).json(application);
+});
+
+app.patch("/applications/:id", (req, res) => {
+  const a = actor(req);
+  const existing = row<any>("SELECT * FROM applications WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "Application not found" });
+  const at = nowIso();
+  const payload = normalizeApplicationPayload(req.body, existing);
+  const validationError = validateApplicationRecord(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const after = { ...existing, ...payload, updated_at: at };
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE applications
+      SET client_full_name = ?,
+          client_phone = ?,
+          client_national_id = ?,
+          vehicle_catalog_id = ?,
+          vehicle_brand = ?,
+          vehicle_model = ?,
+          vehicle_year = ?,
+          vehicle_price_cents = ?,
+          vehicle_cost_cents = ?,
+          down_payment_cents = ?,
+          down_payment_pct = ?,
+          term_months = ?,
+          apr_pct = ?,
+          pricing_tier_id = ?,
+          financial_partner_id = ?,
+          insurance_partner_id = ?,
+          bank_account_id = ?,
+          bank_funded_amount_cents = ?,
+          emc_funded_amount_cents = ?,
+          settlement_mode = ?,
+          closure_mode = ?,
+          stage = ?,
+          notes = ?,
+          updated_at = ?,
+          rejected_reason = ?
+      WHERE id = ?
+    `).run(
+      after.client_full_name,
+      after.client_phone,
+      after.client_national_id,
+      after.vehicle_catalog_id,
+      after.vehicle_brand,
+      after.vehicle_model,
+      after.vehicle_year,
+      after.vehicle_price_cents,
+      after.vehicle_cost_cents,
+      after.down_payment_cents,
+      after.down_payment_pct,
+      after.term_months,
+      after.apr_pct,
+      after.pricing_tier_id,
+      after.financial_partner_id,
+      after.insurance_partner_id,
+      after.bank_account_id,
+      after.bank_funded_amount_cents,
+      after.emc_funded_amount_cents,
+      after.settlement_mode,
+      after.closure_mode,
+      after.stage,
+      after.notes,
+      after.updated_at,
+      after.rejected_reason,
+      existing.id
+    );
+    audit(a.actor_id, a.actor_role, "application", existing.id, "application.updated", existing, after);
+    if (existing.stage !== after.stage) {
+      audit(a.actor_id, a.actor_role, "application", existing.id, "application.stage_changed", { stage: existing.stage }, { stage: after.stage });
+    }
+  })();
+  res.json(after);
+});
 
 app.get("/contracts", (_req, res) => {
   refreshOverdueState();

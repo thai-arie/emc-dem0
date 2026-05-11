@@ -15,6 +15,7 @@ import Notifications from "../screens/Notifications";
 import Audit from "../screens/Audit";
 import Reporting from "../screens/Reporting";
 import Applications from "../screens/finance/Applications";
+import Portfolio from "../screens/finance/Portfolio";
 import VehicleCatalog from "../screens/finance/VehicleCatalog";
 import PricingTiers from "../screens/finance/PricingTiers";
 import FinancialPartners from "../screens/finance/FinancialPartners";
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: "devices", element: <Devices /> },
       { path: "reporting", element: <Reporting /> },
       { path: "finance/applications", element: <Applications /> },
+      { path: "finance/portfolio", element: <Portfolio /> },
       { path: "finance/vehicle-catalog", element: <VehicleCatalog /> },
       { path: "finance/pricing-tiers", element: <PricingTiers /> },
       { path: "finance/financial-partners", element: <FinancialPartners /> },

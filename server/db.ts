@@ -40,6 +40,38 @@ addColumn("collections_cases", "next_action_date", "TEXT NOT NULL DEFAULT ''");
 addColumn("collections_cases", "assigned_agent_id", "TEXT NOT NULL DEFAULT ''");
 addColumn("collection_actions", "note", "TEXT NOT NULL DEFAULT ''");
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS applications (
+    id TEXT PRIMARY KEY,
+    client_full_name TEXT NOT NULL,
+    client_phone TEXT NOT NULL DEFAULT '',
+    client_national_id TEXT,
+    vehicle_catalog_id TEXT,
+    vehicle_brand TEXT NOT NULL DEFAULT '',
+    vehicle_model TEXT NOT NULL DEFAULT '',
+    vehicle_year INTEGER,
+    vehicle_price_cents INTEGER NOT NULL DEFAULT 0,
+    vehicle_cost_cents INTEGER,
+    down_payment_cents INTEGER NOT NULL DEFAULT 0,
+    down_payment_pct REAL NOT NULL DEFAULT 0,
+    term_months INTEGER NOT NULL,
+    apr_pct REAL NOT NULL DEFAULT 0,
+    pricing_tier_id TEXT,
+    financial_partner_id TEXT,
+    insurance_partner_id TEXT,
+    bank_account_id TEXT,
+    bank_funded_amount_cents INTEGER,
+    emc_funded_amount_cents INTEGER,
+    settlement_mode TEXT NOT NULL DEFAULT '',
+    closure_mode TEXT NOT NULL DEFAULT '',
+    stage TEXT NOT NULL CHECK (stage IN ('DRAFT', 'DOCS_PENDING', 'BANK_REVIEW', 'READY_TO_SIGN', 'APPROVED', 'REJECTED', 'CANCELLED')),
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    rejected_reason TEXT
+  )
+`);
+
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency_key ON payments(idempotency_key) WHERE idempotency_key IS NOT NULL");
 
 function tableSql(table: string) {
@@ -350,14 +382,14 @@ if (!tableSql("collection_actions").includes("REQUEST_RESTORE")) {
   `);
 }
 
-if (!tableSql("audit").includes("'client'") || !tableSql("audit").includes("FINANCIAL_CONTROLLER")) {
+if (!tableSql("audit").includes("'client'") || !tableSql("audit").includes("FINANCIAL_CONTROLLER") || !tableSql("audit").includes("'application'")) {
   db.exec(`
     CREATE TABLE audit_next (
       id TEXT PRIMARY KEY,
       ts TEXT NOT NULL,
       actor_id TEXT NOT NULL,
       actor_role TEXT NOT NULL CHECK (actor_role IN ('ADMIN', 'CEO', 'FINANCIAL_CONTROLLER', 'COLLECTIONS', 'OPS')),
-      entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert')),
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert', 'application')),
       entity_id TEXT NOT NULL,
       action TEXT NOT NULL,
       before_json TEXT,

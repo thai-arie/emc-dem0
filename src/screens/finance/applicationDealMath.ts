@@ -51,10 +51,35 @@ export function annuityPayment(principal: number, annualRatePct: number, termMon
   return Math.round((principal * monthlyRate * growth) / (growth - 1));
 }
 
-function addMonths(value: string, months: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCMonth(date.getUTCMonth() + months);
+function safeDate(value?: string | Date | null) {
+  const date = value ? new Date(value) : new Date();
+
+  if (Number.isNaN(date.getTime())) {
+    return new Date();
+  }
+
+  return date;
+}
+
+function safeIsoString(value?: string | Date | null) {
+  const date = safeDate(value);
   return date.toISOString();
+}
+
+function addMonths(dateInput: string | Date | null | undefined, months: number) {
+  const next = safeDate(dateInput);
+
+  if (!Number.isFinite(months)) {
+    return safeIsoString(next);
+  }
+
+  next.setMonth(next.getMonth() + months);
+
+  if (Number.isNaN(next.getTime())) {
+    return new Date().toISOString();
+  }
+
+  return next.toISOString();
 }
 
 export function generateInstallmentSchedulePreview(input: { startDate: string; financedAmount: number; annualRatePct: number; termMonths: number; totalMonthlyPayment: number; basePi: number; limit?: number }): InstallmentPreviewRow[] {
