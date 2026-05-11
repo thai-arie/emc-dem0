@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Vite/cache/test artifacts
+.vite/
+node_modules/.vite/
+coverage/
+.coverage/
+.cache/
+cache/
+tmp/
+temp/
+*.log
+
+# TypeScript build metadata
+*.tsbuildinfo
+
+# OS/editor files
+.DS_Store
+**/.DS_Store
+
+# SQLite transient files
+*.sqlite-wal
+*.sqlite-shm
+
+# Local SQLite/demo backups
+server/emc_backup*.sqlite*
+server/*backup*.sqlite*
+server/*before*.sqlite*
+server/*demo*.sqlite-wal
+server/*demo*.sqlite-shm
+
+# Ad hoc source backups
+*.bak*
+*.backup*
+*.before-*
+*.before-*.*
+*.before_*
+
