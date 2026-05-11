@@ -14,9 +14,10 @@ import {
   financialPartners as fallbackFinancialPartners,
   insurancePartners as fallbackInsurancePartners,
   pricingTiers,
-  vehicleCatalog,
+  vehicleCatalog as fallbackVehicleCatalog,
   type FinancialPartner,
-  type InsurancePartner
+  type InsurancePartner,
+  type VehicleCatalogItem
 } from "./financeReferenceData";
 import { DetailField, financeStyles } from "./FinanceReferenceShared";
 
@@ -109,6 +110,7 @@ export default function ApplicationDetailDrawer({
   mode = "edit",
   financialPartnerOptions = fallbackFinancialPartners,
   insurancePartnerOptions = fallbackInsurancePartners,
+  vehicleCatalogOptions = fallbackVehicleCatalog,
   onClose,
   onSave
 }: {
@@ -116,6 +118,7 @@ export default function ApplicationDetailDrawer({
   mode?: "create" | "edit";
   financialPartnerOptions?: FinancialPartner[];
   insurancePartnerOptions?: InsurancePartner[];
+  vehicleCatalogOptions?: VehicleCatalogItem[];
   onClose: () => void;
   onSave?: (payload: ApplicationPayload) => Promise<void>;
 }) {
@@ -124,6 +127,7 @@ export default function ApplicationDetailDrawer({
   const [draft, setDraft] = useState<Draft>(() => toDraft(application));
   const partnerOptions = financialPartnerOptions.length ? financialPartnerOptions : fallbackFinancialPartners;
   const insurerOptions = insurancePartnerOptions.length ? insurancePartnerOptions : fallbackInsurancePartners;
+  const vehicleOptions = vehicleCatalogOptions.length ? vehicleCatalogOptions : fallbackVehicleCatalog;
   const selectedTier = pricingTiers.find((tier) => tier.id === draft.pricingTierId) ?? pricingTiers[0];
   const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId) ?? partnerOptions[0];
   const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId) ?? insurerOptions[0];
@@ -212,7 +216,7 @@ export default function ApplicationDetailDrawer({
   };
 
   const updateVehicleCatalog = (vehicleCatalogId: string) => {
-    const selected = vehicleCatalog.find((item) => item.id === vehicleCatalogId);
+    const selected = vehicleOptions.find((item) => item.id === vehicleCatalogId);
     if (!selected) {
       setDraft((current) => ({ ...current, vehicleCatalogId: "" }));
       return;
@@ -322,9 +326,9 @@ export default function ApplicationDetailDrawer({
               <span>Catalog reference</span>
               <select value={draft.vehicleCatalogId} onChange={(event) => updateVehicleCatalog(event.target.value)}>
                 <option value="">Manual / not selected</option>
-                {vehicleCatalog.map((item) => (
+                {vehicleOptions.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.brand} {item.model} {item.year} - {formatMoney(item.defaultSalePrice)}
+                    {item.brand} {item.model}{item.variant ? ` ${item.variant}` : ""} {item.year} - {formatMoney(item.defaultSalePrice)}
                   </option>
                 ))}
               </select>

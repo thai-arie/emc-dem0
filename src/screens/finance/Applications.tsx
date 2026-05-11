@@ -8,9 +8,10 @@ import ApplicationDetailDrawer from "./ApplicationDetailDrawer";
 import { calculateDealPreview } from "./applicationDealMath";
 import type { ApplicationSignal, ApplicationStage, FinanceApplication } from "./applicationReferenceData";
 import { applicationStageLabels } from "./applicationReferenceData";
-import { financialPartners as fallbackFinancialPartners, insurancePartners as fallbackInsurancePartners, pricingTiers, type FinancialPartner, type InsurancePartner, type TrafficTone } from "./financeReferenceData";
+import { financialPartners as fallbackFinancialPartners, insurancePartners as fallbackInsurancePartners, pricingTiers, vehicleCatalog as fallbackVehicleCatalog, type FinancialPartner, type InsurancePartner, type TrafficTone, type VehicleCatalogItem } from "./financeReferenceData";
 import { toFinancialPartnerOption, toInsurancePartnerOption } from "./financePartnerAdapters";
 import { FinanceGate, FinancePill, FinanceSummaryStrip, FinanceTraffic, financeStyles } from "./FinanceReferenceShared";
+import { toVehicleCatalogItem } from "./vehicleCatalogAdapters";
 
 function signalFor(application: FinanceApplication): { label: ApplicationSignal; tone: TrafficTone } {
   if (application.stage === "APPROVED") return { label: "APPROVED", tone: "blue" };
@@ -129,6 +130,7 @@ export default function Applications() {
   const [loaded, setLoaded] = useState<FinanceApplication[]>([]);
   const [financialPartnerOptions, setFinancialPartnerOptions] = useState<FinancialPartner[]>(fallbackFinancialPartners);
   const [insurancePartnerOptions, setInsurancePartnerOptions] = useState<InsurancePartner[]>(fallbackInsurancePartners);
+  const [vehicleCatalogOptions, setVehicleCatalogOptions] = useState<VehicleCatalogItem[]>(fallbackVehicleCatalog);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const toast = useUi((state) => state.addToast);
@@ -136,14 +138,16 @@ export default function Applications() {
   const loadApplications = async () => {
     setLoading(true);
     try {
-      const [result, financialResult, insuranceResult] = await Promise.all([
+      const [result, financialResult, insuranceResult, vehicleResult] = await Promise.all([
         api.getApplications(),
         api.getFinancialPartners(),
-        api.getInsurancePartners()
+        api.getInsurancePartners(),
+        api.getVehicleCatalog()
       ]);
       setLoaded(result.applications.map(fromRecord));
       setFinancialPartnerOptions(financialResult.partners.map(toFinancialPartnerOption));
       setInsurancePartnerOptions(insuranceResult.partners.map(toInsurancePartnerOption));
+      setVehicleCatalogOptions(vehicleResult.vehicles.map(toVehicleCatalogItem));
       setLoadError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load applications";
@@ -256,6 +260,7 @@ export default function Applications() {
             application={selectedApplication}
             financialPartnerOptions={financialPartnerOptions}
             insurancePartnerOptions={insurancePartnerOptions}
+            vehicleCatalogOptions={vehicleCatalogOptions}
             onClose={closeApplicationDrawer}
             onSave={saveApplication}
           />

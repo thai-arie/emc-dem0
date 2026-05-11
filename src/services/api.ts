@@ -156,6 +156,24 @@ export interface ApplicationRecord {
 
 export type ApplicationPayload = Omit<ApplicationRecord, "id" | "created_at" | "updated_at">;
 
+export interface VehicleCatalogRecord {
+  id: string;
+  brand: string;
+  model: string;
+  variant: string | null;
+  year: number | null;
+  category: string | null;
+  default_price_cents: number;
+  default_cost_cents: number | null;
+  stock_count: number;
+  status: FinancePartnerStatusRecord;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type VehicleCatalogPayload = Omit<VehicleCatalogRecord, "id" | "created_at" | "updated_at">;
+
 export interface FinancialPartnerRecord {
   id: string;
   name: string;
@@ -348,6 +366,17 @@ export const api = {
   getReportingSummary: () => request<ReportingSummaryResponse>("/reporting/summary"),
   getReportingAging: () => request<AgingRow[]>("/reporting/aging"),
   getReportingCashflow: () => request<CashflowRow[]>("/reporting/cashflow"),
+  getVehicleCatalog: () => request<{ vehicles: VehicleCatalogRecord[] }>("/finance/vehicle-catalog"),
+  createVehicleCatalogItem: async (body: VehicleCatalogPayload) => {
+    const result = await request<VehicleCatalogRecord>("/finance/vehicle-catalog", { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  updateVehicleCatalogItem: async (id: string, body: VehicleCatalogPayload) => {
+    const result = await request<VehicleCatalogRecord>(`/finance/vehicle-catalog/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
   getFinancialPartners: () => request<{ partners: FinancialPartnerRecord[] }>("/finance/financial-partners"),
   createFinancialPartner: async (body: FinancialPartnerPayload) => {
     const result = await request<FinancialPartnerRecord>("/finance/financial-partners", { method: "POST", body: JSON.stringify(body) });

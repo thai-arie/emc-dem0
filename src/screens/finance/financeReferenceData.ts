@@ -4,6 +4,7 @@ export interface VehicleCatalogItem {
   id: string;
   brand: string;
   model: string;
+  variant?: string;
   year: number;
   defaultSalePrice: number;
   defaultVehicleCost: number;

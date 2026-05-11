@@ -339,7 +339,7 @@ function normalizeFinancialPartnerPayload(body: any, existing?: any) {
     funding_type: String(body.funding_type ?? existing?.funding_type ?? "").trim(),
     cost_rate_pct: Number(body.cost_rate_pct ?? existing?.cost_rate_pct ?? 0),
     active_contracts_count: Math.max(0, Math.round(Number(body.active_contracts_count ?? existing?.active_contracts_count ?? 0))),
-    status: validatePartnerStatus(body.status ?? existing?.status ?? "ACTIVE") ?? "ACTIVE",
+    status: String(body.status ?? existing?.status ?? "ACTIVE").trim().toUpperCase(),
     notes: String(body.notes ?? existing?.notes ?? "").trim()
   };
 }
@@ -367,6 +367,37 @@ function validateInsurancePartnerPayload(payload: any) {
   if (!Number.isFinite(payload.premium_pct) || payload.premium_pct < 0) return "Premium cannot be negative";
   if (!Number.isFinite(payload.commission_pct) || payload.commission_pct < 0) return "Commission cannot be negative";
   if (!(partnerStatuses as readonly string[]).includes(payload.status)) return "Invalid partner status";
+  return null;
+}
+
+function wholeNumberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const next = Number(value);
+  return Number.isFinite(next) ? Math.round(next) : null;
+}
+
+function normalizeVehicleCatalogPayload(body: any, existing?: any) {
+  return {
+    brand: String(body.brand ?? existing?.brand ?? "").trim(),
+    model: String(body.model ?? existing?.model ?? "").trim(),
+    variant: nullableText(body.variant ?? existing?.variant),
+    year: wholeNumberOrNull(body.year ?? existing?.year),
+    category: nullableText(body.category ?? existing?.category),
+    default_price_cents: cents(body.default_price_cents ?? existing?.default_price_cents ?? 0),
+    default_cost_cents: numberOrNull(body.default_cost_cents ?? existing?.default_cost_cents),
+    stock_count: Math.round(Number(body.stock_count ?? existing?.stock_count ?? 0)),
+    status: validatePartnerStatus(body.status ?? existing?.status ?? "ACTIVE") ?? "ACTIVE",
+    notes: nullableText(body.notes ?? existing?.notes)
+  };
+}
+
+function validateVehicleCatalogPayload(payload: any) {
+  if (!payload.brand) return "Brand is required";
+  if (!payload.model) return "Model is required";
+  if (!Number.isFinite(payload.default_price_cents) || payload.default_price_cents < 0) return "Default price must be greater than or equal to 0";
+  if (payload.default_cost_cents !== null && (!Number.isFinite(payload.default_cost_cents) || payload.default_cost_cents < 0)) return "Default cost must be greater than or equal to 0";
+  if (!Number.isFinite(payload.stock_count) || payload.stock_count < 0) return "Stock count must be greater than or equal to 0";
+  if (!(partnerStatuses as readonly string[]).includes(payload.status)) return "Invalid vehicle status";
   return null;
 }
 
@@ -1017,6 +1048,79 @@ app.post("/auth/logout", (_req, res) => {
 });
 
 app.use(requireAuth);
+
+app.get("/finance/vehicle-catalog", (_req, res) => {
+  res.json({ vehicles: rows<any>("SELECT * FROM vehicle_catalog ORDER BY CASE status WHEN 'ACTIVE' THEN 0 ELSE 1 END, brand, model, year") });
+});
+
+app.post("/finance/vehicle-catalog", (req, res) => {
+  const at = nowIso();
+  const payload = normalizeVehicleCatalogPayload(req.body);
+  const validationError = validateVehicleCatalogPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const vehicle = { id: nextId("VC"), ...payload, created_at: at, updated_at: at };
+  db.prepare(`
+    INSERT INTO vehicle_catalog (
+      id, brand, model, variant, year, category, default_price_cents,
+      default_cost_cents, stock_count, status, notes, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    vehicle.id,
+    vehicle.brand,
+    vehicle.model,
+    vehicle.variant,
+    vehicle.year,
+    vehicle.category,
+    vehicle.default_price_cents,
+    vehicle.default_cost_cents,
+    vehicle.stock_count,
+    vehicle.status,
+    vehicle.notes,
+    vehicle.created_at,
+    vehicle.updated_at
+  );
+  res.status(201).json(vehicle);
+});
+
+app.patch("/finance/vehicle-catalog/:id", (req, res) => {
+  const existing = row<any>("SELECT * FROM vehicle_catalog WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "Vehicle catalog item not found" });
+  const at = nowIso();
+  const payload = normalizeVehicleCatalogPayload(req.body, existing);
+  const validationError = validateVehicleCatalogPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const vehicle = { ...existing, ...payload, updated_at: at };
+  db.prepare(`
+    UPDATE vehicle_catalog
+    SET brand = ?,
+        model = ?,
+        variant = ?,
+        year = ?,
+        category = ?,
+        default_price_cents = ?,
+        default_cost_cents = ?,
+        stock_count = ?,
+        status = ?,
+        notes = ?,
+        updated_at = ?
+    WHERE id = ?
+  `).run(
+    vehicle.brand,
+    vehicle.model,
+    vehicle.variant,
+    vehicle.year,
+    vehicle.category,
+    vehicle.default_price_cents,
+    vehicle.default_cost_cents,
+    vehicle.stock_count,
+    vehicle.status,
+    vehicle.notes,
+    vehicle.updated_at,
+    existing.id
+  );
+  res.json(vehicle);
+});
 
 app.get("/finance/financial-partners", (_req, res) => {
   res.json({ partners: rows<any>("SELECT * FROM financial_partners ORDER BY CASE status WHEN 'ACTIVE' THEN 0 ELSE 1 END, name") });

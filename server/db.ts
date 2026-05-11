@@ -73,6 +73,22 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS vehicle_catalog (
+    id TEXT PRIMARY KEY,
+    brand TEXT NOT NULL,
+    model TEXT NOT NULL,
+    variant TEXT,
+    year INTEGER,
+    category TEXT,
+    default_price_cents INTEGER NOT NULL DEFAULT 0,
+    default_cost_cents INTEGER,
+    stock_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS financial_partners (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -100,6 +116,24 @@ db.exec(`
 
 function seedFinanceReferenceIfEmpty() {
   const at = new Date().toISOString();
+  const vehicleCount = (db.prepare("SELECT COUNT(*) AS count FROM vehicle_catalog").get() as { count: number }).count;
+  if (!vehicleCount) {
+    const insertVehicle = db.prepare(`
+      INSERT INTO vehicle_catalog (id, brand, model, variant, year, category, default_price_cents, default_cost_cents, stock_count, status, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    [
+      ["v1", "PAIDI", "KT11EV", null, 2026, "Commercial EV", 860000, 645000, 8, "ACTIVE", "Core mass-market financed asset."],
+      ["v2", "PAIDI", "KT11EV Cargo", null, 2026, "Cargo EV", 920000, 690000, 2, "ACTIVE", "Useful for fleet and recovery-friendly contracts."],
+      ["v3", "Chery", "Arrizo 5", null, 2026, "Passenger EV", 1456000, 1100000, 5, "ACTIVE", "Legacy demo pricing reference."],
+      ["v4", "Chery", "Tiggo 4 Pro", null, 2026, "SUV", 1890000, 1450000, 1, "ACTIVE", "Higher ticket size, watch partner exposure."],
+      ["v5", "BYD", "Atto 3", null, 2026, "Passenger EV", 3250000, 2700000, 3, "ACTIVE", "Premium borrower profile reference."],
+      ["v6", "Wuling", "Mini EV", null, 2026, "Micro EV", 980000, 735000, 0, "INACTIVE", "Inactive until inventory refresh."],
+      ["v7", "Leapmotor", "T03", null, 2026, "Passenger EV", 1240000, 930000, 4, "ACTIVE", "Standard finance reference unit."],
+      ["v8", "Gecko", "EV Truck 1T", null, 2026, "Commercial Truck", 1650000, 1250000, 1, "ACTIVE", "Commercial risk tier review recommended."]
+    ].forEach((vehicle) => insertVehicle.run(...vehicle, at, at));
+  }
+
   const financialCount = (db.prepare("SELECT COUNT(*) AS count FROM financial_partners").get() as { count: number }).count;
   if (!financialCount) {
     const insertFinancial = db.prepare(`

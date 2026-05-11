@@ -61,6 +61,22 @@ CREATE TABLE IF NOT EXISTS applications (
   rejected_reason TEXT
 );
 
+CREATE TABLE IF NOT EXISTS vehicle_catalog (
+  id TEXT PRIMARY KEY,
+  brand TEXT NOT NULL,
+  model TEXT NOT NULL,
+  variant TEXT,
+  year INTEGER,
+  category TEXT,
+  default_price_cents INTEGER NOT NULL DEFAULT 0,
+  default_cost_cents INTEGER,
+  stock_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE')),
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS financial_partners (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
