@@ -1,0 +1,190 @@
+import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+export default function MapPanel(props: any) {
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
+  const vehiclesRef = useRef<Map<string, any>>(new Map());
+  const [search, setSearch] = useState("");
+
+  const vehicles = props?.vehicles ?? [];
+
+  const getColor = (v: any) => {
+    if (v?.status === "IMMOBILIZER_ARMED") return "red";
+    if (v?.status === "COLLECTION_RISK") return "orange";
+    return "green";
+  };
+
+  const popupHtml = (d: any) => `
+    Vehicle<br/>
+    ID: ${d.id}<br/>
+    Contract: ${d.contract_id || "-"}<br/>
+    Client: ${d.client || "-"}<br/>
+    Plate: ${d.plate || "-"}<br/>
+    Speed: ${d.speed ?? 0} km/h<br/>
+    Status: ${d.status || "-"}
+  `;
+
+  const openVehicle = (vehicleId: string) => {
+    const d = vehiclesRef.current.get(vehicleId);
+    const marker = markersRef.current.get(vehicleId);
+
+    if (!d || !marker || !mapRef.current) return;
+
+    mapRef.current.flyTo(marker.getLatLng(), 15, {
+      animate: true,
+      duration: 0.7,
+    });
+
+    marker.bindPopup(popupHtml(d)).openPopup();
+  };
+
+  const findVehicle = () => {
+    const q = search.trim().toLowerCase();
+    if (!q) return;
+
+    const match = vehicles.find((v: any) => {
+      return (
+        String(v.id || "").toLowerCase().includes(q) ||
+        String(v.contract_id || "").toLowerCase().includes(q) ||
+        String(v.plate || "").toLowerCase().includes(q) ||
+        String(v.client || "").toLowerCase().includes(q)
+      );
+    });
+
+    if (!match?.id) {
+      alert("No vehicle found");
+      return;
+    }
+
+    openVehicle(String(match.id));
+  };
+
+  useEffect(() => {
+    vehiclesRef.current = new Map(
+      vehicles
+        .filter((v: any) => v?.id)
+        .map((v: any) => [String(v.id), v])
+    );
+  }, [vehicles]);
+
+  useEffect(() => {
+    if (mapRef.current) return;
+
+    const el = document.getElementById("map");
+    if (!el) return;
+
+    mapRef.current = L.map(el).setView([11.5564, 104.9282], 12);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "OSM",
+    }).addTo(mapRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const alive = new Set<string>();
+
+    vehicles.forEach((v: any) => {
+      if (!v?.id) return;
+
+      const vehicleId = String(v.id);
+      alive.add(vehicleId);
+
+      const existing = markersRef.current.get(vehicleId);
+
+      if (existing) {
+        existing.setLatLng([v.lat, v.lng]);
+        existing.setStyle({
+          color: getColor(v),
+        });
+        return;
+      }
+
+      const marker = L.circleMarker([v.lat, v.lng], {
+        radius: 7,
+        color: getColor(v),
+        fillOpacity: 0.85,
+      }).addTo(mapRef.current);
+
+      marker.on("click", () => {
+        const d = vehiclesRef.current.get(vehicleId);
+        if (!d) return;
+
+        console.log("GPS marker click", {
+          markerVehicleId: vehicleId,
+          latestVehicleId: d.id,
+          latestContractId: d.contract_id,
+          latestClient: d.client,
+          latestPlate: d.plate,
+          latestStatus: d.status,
+        });
+
+        marker.bindPopup(popupHtml(d)).openPopup();
+      });
+
+      markersRef.current.set(vehicleId, marker);
+    });
+
+    markersRef.current.forEach((marker, id) => {
+      if (!alive.has(id)) {
+        mapRef.current.removeLayer(marker);
+        markersRef.current.delete(id);
+      }
+    });
+  }, [vehicles]);
+
+  return (
+    <div style={{ height: "100%", width: "100%", position: "relative" }}>
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 1000,
+          background: "white",
+          borderRadius: 10,
+          padding: 10,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") findVehicle();
+          }}
+          placeholder="Find car: contract, plate, client"
+          style={{
+            width: 260,
+            padding: "9px 10px",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            fontSize: 14,
+          }}
+        />
+        <button
+          onClick={findVehicle}
+          style={{
+            padding: "9px 12px",
+            border: "1px solid #111",
+            borderRadius: 8,
+            background: "#111",
+            color: "white",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Find a car
+        </button>
+      </div>
+
+      <div id="map" style={{ height: "100%", width: "100%" }} />
+    </div>
+  );
+}

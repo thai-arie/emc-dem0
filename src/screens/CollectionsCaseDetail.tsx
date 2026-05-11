@@ -11,6 +11,9 @@ import { formatDate } from "../lib/formatDate";
 import { formatMoney } from "../lib/formatMoney";
 import GpsCommandOverlay from "../components/gps/GpsCommandOverlay";
 import { markContractSafeStopped } from "../lib/gpsMock";
+import ApprovalStateBanner from "../components/operations/ApprovalStateBanner";
+import CommandLifecycle from "../components/operations/CommandLifecycle";
+import { RESTORE_REQUEST_NOTE, getWorkflowNextAction, isApprovedForImmobilize as getIsApprovedForImmobilize, isImmobilizerPendingApproval as getIsImmobilizerPendingApproval, isRestoreApproved as getIsRestoreApproved, isRestorePendingApprovalForCase as getIsRestorePendingApprovalForCase } from "../lib/operationsState";
 
 type LogActionType = "NOTE" | "CALL_ATTEMPT" | "SEND_REMINDER" | "REQUEST_IMMOBILIZER";
 
@@ -30,6 +33,13 @@ const { data: gpsData } = useApiData(api.getGps);
   const latestCommand = gpsCommands && gpsCommands.length > 0
     ? [...gpsCommands].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
     : null;
+  const latestCommandStatus = latestCommand
+    ? latestCommand.provider_response && latestCommand.provider_response.toLowerCase().includes("fail")
+      ? "FAILED"
+      : latestCommand.status === "SENT" && latestCommand.provider_response
+        ? "ACKNOWLEDGED"
+        : latestCommand.status
+    : "";
   const latestCommandAgeMs = latestCommand?.created_at
     ? Date.now() - new Date(latestCommand.created_at).getTime()
     : 0;
@@ -92,12 +102,49 @@ const { data: gpsData } = useApiData(api.getGps);
 
 
   const kase = data?.cases.find((item) => item.id === id);
+  const actions = (data?.actions ?? []).filter((item) => item.case_id === id);
 
 const vehicle: any = gpsData?.vehicles?.find(
   (v: any) => String(v.contract_id) === String(kase?.contract_id)
 );
 
-const isApprovedForImmobilize = kase?.status === "APPROVED";
+const workflowNextAction = getWorkflowNextAction(kase);
+const isImmobilizerPendingApproval = getIsImmobilizerPendingApproval(kase);
+const latestRestoreCommand = gpsCommands
+  ? [...gpsCommands]
+      .filter((command) => command.command_type === "RELEASE")
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+  : null;
+const isRestoreApproved = getIsRestoreApproved(kase) || latestRestoreCommand?.status === "APPROVED";
+const isRestorePendingApproval = getIsRestorePendingApprovalForCase(kase, actions);
+const isApprovedForImmobilize = getIsApprovedForImmobilize(kase);
+const canApproveImmobilizer = isImmobilizerPendingApproval && !isGpsPending;
+const canApproveRestore = isRestorePendingApproval && !isGpsPending;
+const isRestoreInFlightOrExecuted = ["SENT", "ACKNOWLEDGED"].includes(String(latestRestoreCommand?.status || ""));
+const isImmobilized = kase?.gps_status === "IMMOBILIZER_ARMED" || vehicle?.status === "IMMOBILIZER_ARMED";
+const isEarlyCollectionStage =
+  kase?.status === "OPEN" &&
+  !isImmobilizerPendingApproval &&
+  !isApprovedForImmobilize &&
+  !isImmobilized;
+const canSendReminder = isEarlyCollectionStage && !isGpsPending;
+const canRequestImmobilizer = isEarlyCollectionStage && !isGpsPending;
+const sendReminderLabel = isEarlyCollectionStage ? "Send reminder" : "Reminder locked after escalation";
+const requestImmobilizerLabel = isImmobilizerPendingApproval
+  ? "Pending controller approval"
+  : isApprovedForImmobilize
+    ? "Immobilizer approved"
+    : isImmobilized
+      ? "Vehicle immobilized"
+      : "Request immobilizer";
+const canRequestRestore =
+  isImmobilized &&
+  Number(kase?.overdue_amount ?? 0) <= 0 &&
+  !isRestorePendingApproval &&
+  !isRestoreApproved &&
+  !isRestoreInFlightOrExecuted &&
+  !isGpsPending;
+const executeRestoreLabel = isRestorePendingApproval ? "Pending restore approval" : "Execute restore";
 
 // Demo safety model:
 // APPROVED alone is not enough. Vehicle must be stopped and ignition OFF.
@@ -117,14 +164,25 @@ const canImmobilize =
   stoppedOk &&
   ignitionOk &&
   gpsFreshOk;
-  const actions = (data?.actions ?? []).filter((item) => item.case_id === id);
-
   const logAction = (type: LogActionType) => {
     if (!kase) return;
     api.logCollectionAction(kase.id, { type, note, ...actorFromUser(user) }).then(() => {
       toast("Action logged");
       setNote("");
       reload();
+    }).catch((error: Error) => {
+      toast(error.message || "Action failed");
+    });
+  };
+
+  const requestRestoreAccess = () => {
+    if (!kase) return;
+    api.logCollectionAction(kase.id, { type: "REQUEST_RESTORE", note, ...actorFromUser(user) }).then(() => {
+      toast("Restore approval requested");
+      setNote("");
+      reload();
+    }).catch((error: Error) => {
+      toast(error.message || "Restore request failed");
     });
   };
 
@@ -366,10 +424,35 @@ const canImmobilize =
           <div><strong>GPS status</strong><p>
   <StatusBadge status={canImmobilize ? "COLLECTION_RISK" : kase.gps_status} />
 </p></div>
-          <div><strong>Immobilizer approval</strong><p>{kase.status === "APPROVED" ? "APPROVED — ready to execute" : (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" ? "PENDING APPROVAL" : "Not requested"}</p></div>
-          <div><strong>Restore status</strong><p>{kase.restore_command_status === "APPROVED" ? "APPROVED — ready to execute" : kase.restore_command_status || "Not requested"}</p></div>
+          <div><strong>Immobilizer approval</strong><p>{isImmobilizerPendingApproval ? "PENDING CONTROLLER APPROVAL" : isApprovedForImmobilize ? "APPROVED — ready to execute" : "Not requested"}</p></div>
+          <div><strong>Restore status</strong><p>{isRestoreApproved ? "APPROVED — ready to execute" : isRestorePendingApproval ? "PENDING RESTORE APPROVAL" : kase.restore_command_status || "Not requested"}</p></div>
         </div>
       </section>
+
+      {(isImmobilizerPendingApproval || isRestorePendingApproval || isRestoreApproved || isApprovedForImmobilize) && (
+        <ApprovalStateBanner
+          critical={kase.gps_status === "IMMOBILIZER_ARMED"}
+          status={isRestoreApproved || isApprovedForImmobilize ? "APPROVED" : "WARNING"}
+          title={
+            isRestorePendingApproval
+                ? "Pending restore approval"
+                : isRestoreApproved
+                  ? "Restore approved"
+                  : isImmobilizerPendingApproval
+                    ? "Pending controller approval"
+                    : "Immobilizer approved"
+          }
+          detail={
+            isRestorePendingApproval
+                ? "Payment has cleared the case, but vehicle access still needs controller approval."
+                : isRestoreApproved
+                  ? "Collections can execute restore once ready."
+                  : isImmobilizerPendingApproval
+                    ? "The request is waiting in the controller approval queue. Duplicate requests are disabled."
+                    : "Collections can execute immobilizer after the safety check passes."
+          }
+        />
+      )}
 
       <RoleGate roles={["COLLECTIONS"]}>
         <section className="screen-panel">
@@ -379,10 +462,15 @@ const canImmobilize =
             <div className="button-row">
               <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("NOTE")}>Add note</button>
               <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("CALL_ATTEMPT")}>Log call</button>
-              <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("SEND_REMINDER")}>Send reminder</button>
-              <button className="secondary-button" disabled={kase.status !== "OPEN" || (kase.workflow_next_action_type ?? kase.next_action_type) === "APPROVE_IMMOBILIZER" || kase.gps_status === "IMMOBILIZER_ARMED" || isGpsPending} onClick={() => logAction("REQUEST_IMMOBILIZER")}>Request immobilizer</button>
+              <button className="secondary-button" disabled={!canSendReminder} onClick={() => logAction("SEND_REMINDER")}>{sendReminderLabel}</button>
+              <button className="secondary-button" disabled={!canRequestImmobilizer} onClick={() => logAction("REQUEST_IMMOBILIZER")}>{requestImmobilizerLabel}</button>
               <button className="primary-button" disabled={!canImmobilize} onClick={executeImmobilizer}>Execute immobilizer</button>
-              <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.restore_command_status !== "APPROVED" || isGpsPending} onClick={executeRestoreAccess}>Execute restore</button>
+              {isImmobilized && Number(kase.overdue_amount) <= 0 && !isRestoreApproved && !isRestoreInFlightOrExecuted && (
+                <button className="secondary-button" disabled={!canRequestRestore} onClick={requestRestoreAccess}>
+                  {isRestorePendingApproval ? "Pending restore approval" : "Request restore"}
+                </button>
+              )}
+              <button className="primary-button" disabled={!isImmobilized || !isRestoreApproved || isGpsPending} onClick={executeRestoreAccess}>{executeRestoreLabel}</button>
             </div>
           </div>
         </section>
@@ -392,8 +480,8 @@ const canImmobilize =
         <section className="screen-panel">
           <h2>Controller approval</h2>
           <div className="button-row">
-            <button className="primary-button" disabled={false} onClick={approveImmobilizer}>Approve immobilizer</button>
-            <button className="primary-button" disabled={kase.gps_status !== "IMMOBILIZER_ARMED" || kase.overdue_amount > 0 || kase.restore_command_status === "APPROVED" || isGpsPending} onClick={approveRestoreAccess}>Approve restore</button>
+            <button className="primary-button" disabled={!canApproveImmobilizer} onClick={approveImmobilizer}>Approve immobilizer</button>
+            <button className="primary-button" disabled={!canApproveRestore} onClick={approveRestoreAccess}>Approve restore</button>
           </div>
         </section>
       </RoleGate>
@@ -405,10 +493,36 @@ const canImmobilize =
           rowKey={(row) => row.id}
           columns={[
             { key: "performed_at", header: "Timestamp", render: (row) => formatDate(row.performed_at) },
-            { key: "type", header: "Type" },
+            { key: "type", header: "Type", render: (row) => row.note?.includes(RESTORE_REQUEST_NOTE) ? "REQUEST_RESTORE" : row.type },
             { key: "performed_by", header: "User" }
           ]}
         />
+      </section>
+
+      <section className="screen-panel command-status-panel">
+        <div className="panel-title-row">
+          <div>
+            <h2>Command lifecycle</h2>
+            <p>Provider command state exposed from existing GPS command history.</p>
+          </div>
+          {latestCommandStatus ? <StatusBadge status={latestCommandStatus} /> : null}
+        </div>
+        {latestCommand ? (
+          <div className="command-status-grid">
+            <CommandLifecycle status={latestCommandStatus} commandType={latestCommand.command_type} />
+            <div className="command-meta">
+              <div><span>Requested by</span><strong>{latestCommand.requested_by || "-"}</strong></div>
+              <div><span>Approved by</span><strong>{latestCommand.approved_by || "-"}</strong></div>
+              <div><span>Requested at</span><strong>{formatDate(latestCommand.created_at)}</strong></div>
+              <div><span>Executed at</span><strong>{latestCommand.executed_at ? formatDate(latestCommand.executed_at) : "-"}</strong></div>
+            </div>
+          </div>
+        ) : (
+          <div className="empty compact-empty">
+            <h2>No data available</h2>
+            <p>No GPS command lifecycle has started for this case.</p>
+          </div>
+        )}
       </section>
 
       <section className="screen-panel">

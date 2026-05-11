@@ -14,6 +14,12 @@ import Devices from "../screens/Devices";
 import Notifications from "../screens/Notifications";
 import Audit from "../screens/Audit";
 import Reporting from "../screens/Reporting";
+import Applications from "../screens/finance/Applications";
+import VehicleCatalog from "../screens/finance/VehicleCatalog";
+import PricingTiers from "../screens/finance/PricingTiers";
+import FinancialPartners from "../screens/finance/FinancialPartners";
+import InsurancePartners from "../screens/finance/InsurancePartners";
+import BankAccounts from "../screens/finance/BankAccounts";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -32,6 +38,12 @@ export const router = createBrowserRouter([
       { path: "gps", element: <Gps /> },
       { path: "devices", element: <Devices /> },
       { path: "reporting", element: <Reporting /> },
+      { path: "finance/applications", element: <Applications /> },
+      { path: "finance/vehicle-catalog", element: <VehicleCatalog /> },
+      { path: "finance/pricing-tiers", element: <PricingTiers /> },
+      { path: "finance/financial-partners", element: <FinancialPartners /> },
+      { path: "finance/insurance-partners", element: <InsurancePartners /> },
+      { path: "finance/bank-accounts", element: <BankAccounts /> },
       { path: "notifications", element: <Notifications /> },
       { path: "audit", element: <Audit /> }
     ]

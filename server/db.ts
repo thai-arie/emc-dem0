@@ -333,6 +333,23 @@ if (!tableSql("collection_actions").includes("APPROVE_IMMOBILIZER")) {
   `);
 }
 
+if (!tableSql("collection_actions").includes("REQUEST_RESTORE")) {
+  db.exec(`
+    CREATE TABLE collection_actions_next (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      type TEXT NOT NULL CHECK (type IN ('SMS', 'ARM_IMMOBILIZER', 'SEND_REMINDER', 'CALL_ATTEMPT', 'NOTE', 'REQUEST_IMMOBILIZER', 'APPROVE_IMMOBILIZER', 'REQUEST_RESTORE')),
+      performed_by TEXT NOT NULL,
+      performed_at TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT ''
+    );
+    INSERT INTO collection_actions_next (id, case_id, type, performed_by, performed_at, note)
+      SELECT id, case_id, type, performed_by, performed_at, note FROM collection_actions;
+    DROP TABLE collection_actions;
+    ALTER TABLE collection_actions_next RENAME TO collection_actions;
+  `);
+}
+
 if (!tableSql("audit").includes("'client'") || !tableSql("audit").includes("FINANCIAL_CONTROLLER")) {
   db.exec(`
     CREATE TABLE audit_next (

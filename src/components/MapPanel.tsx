@@ -16,6 +16,54 @@ export default function MapPanel(props: any) {
     return "green";
   };
 
+  const isDemoCar = (v: any) => {
+    const haystack = [
+      v?.id,
+      v?.contract_id,
+      v?.contractId,
+      v?.contract,
+      v?.plate,
+      v?.client,
+      v?.client_name,
+      v?.name,
+    ].map((x) => String(x || "")).join(" ");
+
+    return haystack.includes("2116");
+  };
+
+
+  const demoCarIcon = (v: any) => {
+    return L.divIcon({
+      className: "emc-demo-car-icon",
+      html: `
+        <div style="
+          width: 22px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        ">
+          <img
+            src="/demo-assets/kt2116-car.png"
+            style="
+              width: 42px;
+              height: 78px;
+              object-fit: contain;
+              filter: drop-shadow(0 0 4px rgba(250,204,21,0.65));
+              transform: rotate(${Number(v?.heading || 0)}deg);
+              transform-origin: center center;
+              transition: transform 220ms linear;
+            "
+          />
+        </div>
+      `,
+      iconSize: [42, 78],
+      iconAnchor: [21, 39],
+      popupAnchor: [0, -32],
+    });
+  };
+
   const popupHtml = (d: any) => {
     const lat = Number(d.lat);
     const lng = Number(d.lng);
@@ -125,17 +173,27 @@ export default function MapPanel(props: any) {
 
       if (existing) {
         existing.setLatLng([v.lat, v.lng]);
-        existing.setStyle({
-          color: getColor(v),
-        });
+
+        if (isDemoCar(v) && "setIcon" in existing) {
+          existing.setIcon(demoCarIcon(v));
+        } else if ("setStyle" in existing) {
+          existing.setStyle({
+            color: getColor(v),
+          });
+        }
+
         return;
       }
 
-      const marker = L.circleMarker([v.lat, v.lng], {
-        radius: 7,
-        color: getColor(v),
-        fillOpacity: 0.85,
-      }).addTo(mapRef.current);
+      const marker = (
+        isDemoCar(v)
+          ? L.marker([v.lat, v.lng], { icon: demoCarIcon(v) })
+          : L.circleMarker([v.lat, v.lng], {
+              radius: 7,
+              color: getColor(v),
+              fillOpacity: 0.85,
+            })
+      ).addTo(mapRef.current);
 
       marker.on("click", () => {
         const d = vehiclesRef.current.get(vehicleId);

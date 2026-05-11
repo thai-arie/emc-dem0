@@ -114,7 +114,7 @@ export interface CollectionsCase {
 export interface CollectionAction {
   id: string;
   case_id: string;
-  type: "SMS" | "ARM_IMMOBILIZER" | "SEND_REMINDER" | "CALL_ATTEMPT" | "NOTE" | "REQUEST_IMMOBILIZER" | "APPROVE_IMMOBILIZER";
+  type: "SMS" | "ARM_IMMOBILIZER" | "SEND_REMINDER" | "CALL_ATTEMPT" | "NOTE" | "REQUEST_IMMOBILIZER" | "APPROVE_IMMOBILIZER" | "REQUEST_RESTORE";
   performed_by: string;
   performed_at: string;
   note: string;

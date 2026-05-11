@@ -260,7 +260,7 @@ export const api = {
     refresh();
     return result;
   },
-  logCollectionAction: async (caseId: string, body: { type: "SEND_REMINDER" | "CALL_ATTEMPT" | "NOTE" | "REQUEST_IMMOBILIZER"; note?: string } & ActorPayload) => {
+  logCollectionAction: async (caseId: string, body: { type: "SEND_REMINDER" | "CALL_ATTEMPT" | "NOTE" | "REQUEST_IMMOBILIZER" | "REQUEST_RESTORE"; note?: string } & ActorPayload) => {
     const result = await request<CollectionAction>(`/collections/${caseId}/actions`, { method: "POST", body: JSON.stringify(body) });
     refresh();
     return result;

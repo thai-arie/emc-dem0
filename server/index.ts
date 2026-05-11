@@ -1363,18 +1363,31 @@ app.post("/collections/:id/actions", (req, res) => {
   const a = actor(req);
   if (!requirePermission(req, res, "gps.arm")) return;
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
-  if (!kase || kase.status === "CLOSED" || kase.status === "CURED") return res.status(409).json({ error: "Invalid case action" });
-  const type = String(req.body.type || "");
-  if (!["SEND_REMINDER", "CALL_ATTEMPT", "NOTE", "REQUEST_IMMOBILIZER"].includes(type)) return res.status(400).json({ error: "Invalid action type" });
+  const note = String(req.body.note || "");
+  const rawType = String(req.body.type || "").trim().toUpperCase();
+  const restoreRequestTypes = ["REQUEST_RESTORE", "REQUEST_RESTORE_ACCESS", "RESTORE_REQUESTED", "RELEASE_REQUESTED"];
+  const isRestoreRequest = restoreRequestTypes.includes(rawType) || (rawType === "NOTE" && note.includes("RESTORE_ACCESS_REQUESTED"));
+  const type = isRestoreRequest ? "REQUEST_RESTORE" : rawType;
+  if (!kase || ((kase.status === "CLOSED" || kase.status === "CURED") && !isRestoreRequest)) return res.status(409).json({ error: "Invalid case action" });
+  if (!["SEND_REMINDER", "CALL_ATTEMPT", "NOTE", "REQUEST_IMMOBILIZER", "REQUEST_RESTORE"].includes(type)) return res.status(400).json({ error: "Invalid action type" });
   if (type === "REQUEST_IMMOBILIZER" && kase.status !== "OPEN") {
     return res.status(409).json({ error: "Invalid case transition" });
   }
   const at = nowIso();
-  const note = String(req.body.note || "");
   const nextStatus = kase.status;
-  const nextActionType = type === "REQUEST_IMMOBILIZER" ? "APPROVE_IMMOBILIZER" : type === "NOTE" ? kase.next_action_type || "CALL_ATTEMPT" : type;
+  const nextActionType = isRestoreRequest ? "APPROVE_RESTORE" : type === "REQUEST_IMMOBILIZER" ? "APPROVE_IMMOBILIZER" : type === "NOTE" ? kase.next_action_type || "CALL_ATTEMPT" : type;
   const action = { id: nextId("ACT"), case_id: kase.id, type, performed_by: a.actor_id, performed_at: at, note };
-  const { gps } = type === "REQUEST_IMMOBILIZER" ? gpsForCase(kase) : { gps: null };
+  const { contract, gps } = type === "REQUEST_IMMOBILIZER" || isRestoreRequest ? gpsForCase(kase) : { contract: null, gps: null };
+  if (isRestoreRequest) {
+    if (!contract || !gps || gps.status !== "IMMOBILIZER_ARMED") return res.status(409).json({ error: "Vehicle is not restricted" });
+    const overdueLeft = row<any>("SELECT * FROM installments WHERE contract_id = ? AND status = 'OVERDUE' LIMIT 1", [contract.id]);
+    if (overdueLeft || contract.status === "VOID") return res.status(409).json({ error: "Contract is not eligible for restore" });
+    const existingRestore = row<any>(
+      "SELECT * FROM gps_commands WHERE device_id = ? AND command_type = 'RELEASE' AND status IN ('APPROVED', 'SENT', 'ACKNOWLEDGED') ORDER BY created_at DESC LIMIT 1",
+      [gps.id]
+    );
+    if (existingRestore) return res.status(409).json({ error: "Restore already requested" });
+  }
   db.transaction(() => {
     db.prepare("INSERT INTO collection_actions (id, case_id, type, performed_by, performed_at, note) VALUES (?, ?, ?, ?, ?, ?)").run(action.id, action.case_id, action.type, action.performed_by, action.performed_at, action.note);
     db.prepare("UPDATE collections_cases SET status = ?, next_action_type = ?, next_action_date = ?, assigned_agent_id = ? WHERE id = ?").run(nextStatus, nextActionType, at, a.actor_id, kase.id);

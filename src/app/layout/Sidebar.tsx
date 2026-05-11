@@ -21,6 +21,15 @@ const operations: SidebarEntry[] = [
   { label: "Reporting", to: "/reporting", roles: ["CEO", "FINANCIAL_CONTROLLER"] as const }
 ];
 
+const finance: SidebarEntry[] = [
+  { label: "Applications", to: "/finance/applications" },
+  { label: "Vehicle Catalog", to: "/finance/vehicle-catalog" },
+  { label: "Pricing Tiers", to: "/finance/pricing-tiers" },
+  { label: "Financial Partners", to: "/finance/financial-partners" },
+  { label: "Insurance Partners", to: "/finance/insurance-partners" },
+  { label: "Bank Accounts", to: "/finance/bank-accounts" }
+];
+
 const system = [
   { label: "Notifications", to: "/notifications" },
   { label: "Audit Log", to: "/audit" }
@@ -50,6 +59,12 @@ export default function Sidebar() {
             <div key={entry.to}>{item(entry)}</div>
           )
         )}
+      </nav>
+      <div className={styles.groupTitle}>FINANCE</div>
+      <nav className={styles.nav}>
+        {finance.map((entry) => (
+          <div key={entry.to}>{item(entry)}</div>
+        ))}
       </nav>
       <div className={styles.groupTitle}>SYSTEM</div>
       <nav className={styles.nav}>{system.map((entry) => <div key={entry.to}>{item(entry)}</div>)}</nav>
