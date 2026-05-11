@@ -13,6 +13,8 @@ import { toFinancialPartnerOption, toInsurancePartnerOption } from "./financePar
 import { FinanceGate, FinancePill, FinanceSummaryStrip, FinanceTraffic, financeStyles } from "./FinanceReferenceShared";
 import { toVehicleCatalogItem } from "./vehicleCatalogAdapters";
 
+const activePipelineStages: ApplicationStage[] = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN"];
+
 function signalFor(application: FinanceApplication): { label: ApplicationSignal; tone: TrafficTone } {
   if (application.stage === "APPROVED") return { label: "APPROVED", tone: "blue" };
   if (application.stage === "REJECTED" || application.stage === "CANCELLED") return { label: "REJECTED", tone: "red" };
@@ -128,6 +130,11 @@ export default function Applications() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("edit");
   const [loaded, setLoaded] = useState<FinanceApplication[]>([]);
+  const [pipelineScope, setPipelineScope] = useState<"active" | "all" | "APPROVED" | "REJECTED" | "CANCELLED">("active");
+  const [stageFilter, setStageFilter] = useState<"all" | ApplicationStage>("all");
+  const [financialPartnerFilter, setFinancialPartnerFilter] = useState("all");
+  const [insurancePartnerFilter, setInsurancePartnerFilter] = useState("all");
+  const [vehicleBrandFilter, setVehicleBrandFilter] = useState("all");
   const [financialPartnerOptions, setFinancialPartnerOptions] = useState<FinancialPartner[]>(fallbackFinancialPartners);
   const [insurancePartnerOptions, setInsurancePartnerOptions] = useState<InsurancePartner[]>(fallbackInsurancePartners);
   const [vehicleCatalogOptions, setVehicleCatalogOptions] = useState<VehicleCatalogItem[]>(fallbackVehicleCatalog);
@@ -163,6 +170,22 @@ export default function Applications() {
   }, []);
 
   const applications = loaded;
+  const vehicleBrands = useMemo(() => Array.from(new Set(applications.map((application) => application.vehicleBrand).filter(Boolean))).sort(), [applications]);
+  const filteredApplications = useMemo(
+    () =>
+      applications.filter((application) => {
+        if (pipelineScope === "active" && !activePipelineStages.includes(application.stage)) return false;
+        if (pipelineScope === "APPROVED" && application.stage !== "APPROVED") return false;
+        if (pipelineScope === "REJECTED" && application.stage !== "REJECTED") return false;
+        if (pipelineScope === "CANCELLED" && application.stage !== "CANCELLED") return false;
+        if (stageFilter !== "all" && application.stage !== stageFilter) return false;
+        if (financialPartnerFilter !== "all" && application.financialPartnerId !== financialPartnerFilter) return false;
+        if (insurancePartnerFilter !== "all" && application.insurancePartnerId !== insurancePartnerFilter) return false;
+        if (vehicleBrandFilter !== "all" && application.vehicleBrand !== vehicleBrandFilter) return false;
+        return true;
+      }),
+    [applications, financialPartnerFilter, insurancePartnerFilter, pipelineScope, stageFilter, vehicleBrandFilter]
+  );
   const summary = useMemo(() => {
     const total = applications.length;
     const docs = applications.filter((application) => application.stage === "DOCS_PENDING").length;
@@ -224,19 +247,67 @@ export default function Applications() {
         <FinanceSummaryStrip metrics={summary} />
         <section className="screen-panel">
           <h2>{loading ? "Loading applications" : "Origination pipeline"}</h2>
+          <div className={financeStyles.filterGrid}>
+            <label>
+              <span>Pipeline view</span>
+              <select value={pipelineScope} onChange={(event) => setPipelineScope(event.target.value as typeof pipelineScope)}>
+                <option value="active">Active pipeline</option>
+                <option value="all">All records</option>
+                <option value="APPROVED">Approved only</option>
+                <option value="REJECTED">Rejected only</option>
+                <option value="CANCELLED">Cancelled only</option>
+              </select>
+            </label>
+            <label>
+              <span>Stage</span>
+              <select value={stageFilter} onChange={(event) => setStageFilter(event.target.value as "all" | ApplicationStage)}>
+                <option value="all">All stages</option>
+                {Object.entries(applicationStageLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Financial partner</span>
+              <select value={financialPartnerFilter} onChange={(event) => setFinancialPartnerFilter(event.target.value)}>
+                <option value="all">All financial partners</option>
+                {financialPartnerOptions.map((partner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.partnerName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Insurance partner</span>
+              <select value={insurancePartnerFilter} onChange={(event) => setInsurancePartnerFilter(event.target.value)}>
+                <option value="all">All insurance partners</option>
+                {insurancePartnerOptions.map((partner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.insurer}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Vehicle brand</span>
+              <select value={vehicleBrandFilter} onChange={(event) => setVehicleBrandFilter(event.target.value)}>
+                <option value="all">All brands</option>
+                {vehicleBrands.map((brand) => (
+                  <option key={brand} value={brand}>
+                    {brand}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <DataTable
-            rows={applications}
+            rows={filteredApplications}
             rowKey={(row) => row.id}
             onRowClick={openApplicationDrawer}
-            searchKey={(row) => `${row.id} ${row.clientFullName} ${row.vehicleBrand} ${row.vehicleModel} ${applicationStageLabels[row.stage]} ${tierName(row.pricingTierId)} ${partnerName(row.financialPartnerId, financialPartnerOptions)}`}
-            filters={[
-              { label: "Draft", predicate: (row) => row.stage === "DRAFT" },
-              { label: "Docs", predicate: (row) => row.stage === "DOCS_PENDING" },
-              { label: "Bank review", predicate: (row) => row.stage === "BANK_REVIEW" },
-              { label: "Ready", predicate: (row) => row.stage === "READY_TO_SIGN" },
-              { label: "Approved", predicate: (row) => row.stage === "APPROVED" },
-              { label: "Rejected", predicate: (row) => row.stage === "REJECTED" }
-            ]}
+            searchKey={(row) => `${row.id} ${row.clientFullName} ${row.clientPhone} ${row.vehicleBrand} ${row.vehicleModel} ${applicationStageLabels[row.stage]} ${tierName(row.pricingTierId)} ${partnerName(row.financialPartnerId, financialPartnerOptions)} ${insurancePartnerOptions.find((partner) => partner.id === row.insurancePartnerId)?.insurer ?? row.insurancePartnerId}`}
             exportCSV="finance-applications.csv"
             columns={[
               { key: "signal", header: "Signal", render: (row) => <FinanceTraffic tone={signalFor(row).tone} label={signalFor(row).label} />, sortValue: (row) => signalFor(row).label },
@@ -261,6 +332,7 @@ export default function Applications() {
             financialPartnerOptions={financialPartnerOptions}
             insurancePartnerOptions={insurancePartnerOptions}
             vehicleCatalogOptions={vehicleCatalogOptions}
+            duplicateApplications={applications}
             onClose={closeApplicationDrawer}
             onSave={saveApplication}
           />

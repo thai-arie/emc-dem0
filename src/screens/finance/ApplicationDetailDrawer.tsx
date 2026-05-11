@@ -111,6 +111,7 @@ export default function ApplicationDetailDrawer({
   financialPartnerOptions = fallbackFinancialPartners,
   insurancePartnerOptions = fallbackInsurancePartners,
   vehicleCatalogOptions = fallbackVehicleCatalog,
+  duplicateApplications = [],
   onClose,
   onSave
 }: {
@@ -119,6 +120,7 @@ export default function ApplicationDetailDrawer({
   financialPartnerOptions?: FinancialPartner[];
   insurancePartnerOptions?: InsurancePartner[];
   vehicleCatalogOptions?: VehicleCatalogItem[];
+  duplicateApplications?: FinanceApplication[];
   onClose: () => void;
   onSave?: (payload: ApplicationPayload) => Promise<void>;
 }) {
@@ -132,6 +134,33 @@ export default function ApplicationDetailDrawer({
   const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId) ?? partnerOptions[0];
   const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId) ?? insurerOptions[0];
   const selectedAccount = bankAccounts.find((account) => account.id === draft.bankAccountId);
+  const duplicateWarnings = useMemo(() => {
+    const normalize = (value: string) => value.trim().toLowerCase();
+    const normalizePhone = (value: string) => value.replace(/\D/g, "");
+    const normalizeNationalId = (value: string) => value.trim().toUpperCase();
+    const phone = normalizePhone(draft.clientPhone);
+    const nationalId = normalizeNationalId(draft.clientNationalId);
+    const clientName = normalize(draft.clientFullName);
+    const vehicleBrand = normalize(draft.vehicleBrand);
+    const vehicleModel = normalize(draft.vehicleModel);
+    const candidates = duplicateApplications.filter((candidate) => candidate.id !== application.id);
+    const warnings: string[] = [];
+    const samePhone = phone ? candidates.filter((candidate) => normalizePhone(candidate.clientPhone) === phone) : [];
+    const sameNationalId = nationalId ? candidates.filter((candidate) => normalizeNationalId(candidate.clientNationalId) === nationalId) : [];
+    const sameClientVehicle =
+      clientName && vehicleBrand && vehicleModel
+        ? candidates.filter(
+            (candidate) =>
+              normalize(candidate.clientFullName) === clientName &&
+              normalize(candidate.vehicleBrand) === vehicleBrand &&
+              normalize(candidate.vehicleModel) === vehicleModel
+          )
+        : [];
+    if (samePhone.length) warnings.push(`Possible duplicate: existing application ${samePhone.map((item) => item.id).join(", ")} with same phone`);
+    if (sameNationalId.length) warnings.push(`Possible duplicate: existing application ${sameNationalId.map((item) => item.id).join(", ")} with same national ID`);
+    if (sameClientVehicle.length) warnings.push(`Possible duplicate: same client and vehicle already exists (${sameClientVehicle.map((item) => item.id).join(", ")})`);
+    return warnings;
+  }, [application.id, draft.clientFullName, draft.clientNationalId, draft.clientPhone, draft.vehicleBrand, draft.vehicleModel, duplicateApplications]);
 
   const vehiclePrice = Math.max(0, Math.round(draft.vehiclePriceDollars * 100));
   const vehicleCost = Math.max(0, Math.round(draft.vehicleCostDollars * 100));
@@ -318,6 +347,18 @@ export default function ApplicationDetailDrawer({
             </label>
           </div>
         </section>
+
+        {duplicateWarnings.length ? (
+          <section className={financeStyles.warningPanel}>
+            <h3>Duplicate watch</h3>
+            <ul>
+              {duplicateWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+            <p>Save is still allowed. Review before progressing this intake.</p>
+          </section>
+        ) : null}
 
         <section className={financeStyles.drawerSection}>
           <h3>Vehicle</h3>

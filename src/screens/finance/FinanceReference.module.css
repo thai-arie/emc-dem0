@@ -173,6 +173,67 @@
   padding-left: 10px;
 }
 
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.filterGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filterGrid select {
+  min-width: 0;
+  border: 1px solid rgba(126, 166, 201, 0.22);
+  border-radius: var(--radius);
+  background: rgba(4, 10, 20, 0.78);
+  color: var(--color-text);
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 780;
+}
+
+.warningPanel {
+  border: 1px solid rgba(215, 169, 74, 0.3);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(95, 67, 16, 0.26), rgba(5, 11, 22, 0.42));
+  padding: 12px 13px;
+}
+
+.warningPanel h3 {
+  margin: 0 0 8px;
+  color: var(--color-gold-soft);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.warningPanel ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.warningPanel p {
+  margin: 8px 0 0;
+  color: var(--color-muted-strong);
+  font-size: 11px;
+}
+
 .drawerStack {
   display: grid;
   gap: 12px;
@@ -508,6 +569,7 @@
 @media (max-width: 760px) {
   .detailGridTwo,
   .controlGrid,
+  .filterGrid,
   .previewGrid,
   .compositionGrid,
   .opsBridgeGrid {
