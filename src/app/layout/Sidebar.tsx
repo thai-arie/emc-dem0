@@ -12,28 +12,29 @@ type SidebarEntry = {
 };
 
 const operations: SidebarEntry[] = [
-  { label: "Overview", to: "/" },
-  { label: "Contracts", to: "/contracts" },
-  { label: "Payments", to: "/payments" },
-  { label: "Collections", to: "/collections", strictRoles: ["CEO", "FINANCIAL_CONTROLLER", "COLLECTIONS"] as const },
-  { label: "GPS", to: "/gps" },
-  { label: "Devices", to: "/devices" },
-  { label: "Reporting", to: "/reporting", roles: ["CEO", "FINANCIAL_CONTROLLER"] as const }
+  { label: "Overview", to: "/overview", roles: ["VIEWER"] as const },
+  { label: "Contracts", to: "/contracts", roles: ["FINANCE", "OPS", "CONTROLLER", "VIEWER"] as const },
+  { label: "Payments", to: "/payments", roles: ["FINANCE", "COLLECTIONS_AGENT", "VIEWER"] as const },
+  { label: "Collections", to: "/collections", roles: ["COLLECTIONS_AGENT", "CONTROLLER", "VIEWER"] as const },
+  { label: "GPS", to: "/gps", roles: ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"] as const },
+  { label: "Devices", to: "/devices", roles: ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"] as const },
+  { label: "Reporting", to: "/reporting", roles: ["FINANCE", "CONTROLLER", "VIEWER"] as const }
 ];
 
 const finance: SidebarEntry[] = [
-  { label: "Applications", to: "/finance/applications" },
-  { label: "Portfolio", to: "/finance/portfolio" },
-  { label: "Vehicle Catalog", to: "/finance/vehicle-catalog" },
-  { label: "Pricing Tiers", to: "/finance/pricing-tiers" },
-  { label: "Financial Partners", to: "/finance/financial-partners" },
-  { label: "Insurance Partners", to: "/finance/insurance-partners" },
-  { label: "Bank Accounts", to: "/finance/bank-accounts" }
+  { label: "Applications", to: "/finance/applications", roles: ["SALES", "FINANCE", "VIEWER"] as const },
+  { label: "Portfolio", to: "/finance/portfolio", roles: ["FINANCE", "VIEWER"] as const },
+  { label: "Vehicle Catalog", to: "/finance/vehicle-catalog", roles: ["SALES", "FINANCE", "VIEWER"] as const },
+  { label: "Pricing Tiers", to: "/finance/pricing-tiers", roles: ["SALES", "FINANCE", "VIEWER"] as const },
+  { label: "Financial Partners", to: "/finance/financial-partners", roles: ["FINANCE", "VIEWER"] as const },
+  { label: "Insurance Partners", to: "/finance/insurance-partners", roles: ["FINANCE", "VIEWER"] as const },
+  { label: "Bank Accounts", to: "/finance/bank-accounts", roles: ["FINANCE", "VIEWER"] as const }
 ];
 
-const system = [
-  { label: "Notifications", to: "/notifications" },
-  { label: "Audit Log", to: "/audit" }
+const system: SidebarEntry[] = [
+  { label: "Notifications", to: "/notifications", roles: ["OPS", "CONTROLLER", "COLLECTIONS_AGENT", "VIEWER"] as const },
+  { label: "Audit Log", to: "/audit", roles: ["FINANCE", "CONTROLLER", "VIEWER"] as const },
+  { label: "User Management", to: "/admin/users", strictRoles: ["ADMIN"] as const }
 ];
 
 export default function Sidebar() {
@@ -63,12 +64,20 @@ export default function Sidebar() {
       </nav>
       <div className={styles.groupTitle}>FINANCE</div>
       <nav className={styles.nav}>
-        {finance.map((entry) => (
-          <div key={entry.to}>{item(entry)}</div>
-        ))}
+        {finance.map((entry) => (entry.roles ? <RoleGate key={entry.to} roles={[...entry.roles]}>{item(entry)}</RoleGate> : <div key={entry.to}>{item(entry)}</div>))}
       </nav>
       <div className={styles.groupTitle}>SYSTEM</div>
-      <nav className={styles.nav}>{system.map((entry) => <div key={entry.to}>{item(entry)}</div>)}</nav>
+      <nav className={styles.nav}>
+        {system.map((entry) =>
+          entry.strictRoles ? (
+            role && entry.strictRoles.includes(role) ? <div key={entry.to}>{item(entry)}</div> : null
+          ) : entry.roles ? (
+            <RoleGate key={entry.to} roles={[...entry.roles]}>{item(entry)}</RoleGate>
+          ) : (
+            <div key={entry.to}>{item(entry)}</div>
+          )
+        )}
+      </nav>
     </aside>
   );
 }

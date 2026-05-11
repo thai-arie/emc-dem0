@@ -67,7 +67,7 @@ const tierDefaults: Record<string, { aprPct: number; downPaymentPct: number; ter
 };
 
 function canViewMargin(role: Role | undefined) {
-  return role === "ADMIN" || role === "CEO" || role === "FINANCIAL_CONTROLLER";
+  return role === "ADMIN" || role === "FINANCE" || role === "CONTROLLER";
 }
 
 function formatPreviewDate(value: string) {

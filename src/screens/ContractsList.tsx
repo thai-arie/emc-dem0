@@ -3,7 +3,6 @@ import { useState } from "react";
 import DataTable from "../components/DataTable";
 import ConfirmDialog from "../components/ConfirmDialog";
 import StatusBadge from "../components/StatusBadge";
-import RoleGate from "../app/layout/RoleGate";
 import { actorFromUser, api, useApiData } from "../services/api";
 import { formatMoney } from "../lib/formatMoney";
 import { useAuth } from "../store/auth";
@@ -37,6 +36,7 @@ export default function ContractsList() {
   const user = useAuth((state) => state.user);
   const addToast = useUi((state) => state.addToast);
   const { data, reload } = useApiData(api.getContracts);
+  const canCreateContract = user?.role === "ADMIN";
   const [creating, setCreating] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState<ContractForm>({
@@ -183,10 +183,12 @@ export default function ContractsList() {
       <div className="screen-header">
         <h1 className="screen-title">Contracts</h1>
         <div style={{ display: "flex", gap: "8px" }}>
-          <Link className="secondary-button" to="/contracts/void">
-            Voided
-          </Link>
-          <RoleGate roles={["OPS", "FINANCIAL_CONTROLLER"]}>
+          {canCreateContract ? (
+            <Link className="secondary-button" to="/contracts/void">
+              Voided
+            </Link>
+          ) : null}
+          {canCreateContract ? (
             <button
               className="primary-button"
               onClick={() => {
@@ -196,7 +198,7 @@ export default function ContractsList() {
             >
               + New Contract
             </button>
-          </RoleGate>
+          ) : null}
         </div>
       </div>
       <DataTable

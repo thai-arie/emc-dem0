@@ -39,6 +39,49 @@ addColumn("collections_cases", "next_action_type", "TEXT NOT NULL DEFAULT 'SEND_
 addColumn("collections_cases", "next_action_date", "TEXT NOT NULL DEFAULT ''");
 addColumn("collections_cases", "assigned_agent_id", "TEXT NOT NULL DEFAULT ''");
 addColumn("collection_actions", "note", "TEXT NOT NULL DEFAULT ''");
+addColumn("users", "full_name", "TEXT NOT NULL DEFAULT ''");
+addColumn("users", "status", "TEXT NOT NULL DEFAULT 'ACTIVE'");
+addColumn("users", "updated_at", "TEXT NOT NULL DEFAULT ''");
+addColumn("users", "last_login_at", "TEXT");
+
+function roleExpr(column = "role") {
+  return `CASE ${column}
+    WHEN 'CEO' THEN 'VIEWER'
+    WHEN 'FINANCIAL_CONTROLLER' THEN 'CONTROLLER'
+    WHEN 'COLLECTIONS' THEN 'COLLECTIONS_AGENT'
+    ELSE ${column}
+  END`;
+}
+
+if (!tableSql("users").includes("'SALES'") || !columns("users").has("status") || !columns("users").has("full_name") || !columns("users").has("last_login_at")) {
+  db.exec(`
+    CREATE TABLE users_next (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('ADMIN', 'SALES', 'FINANCE', 'COLLECTIONS_AGENT', 'OPS', 'CONTROLLER', 'VIEWER')),
+      status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_login_at TEXT
+    );
+    INSERT INTO users_next (id, full_name, email, password_hash, role, status, created_at, updated_at, last_login_at)
+      SELECT
+        id,
+        COALESCE(NULLIF(full_name, ''), email),
+        email,
+        password_hash,
+        ${roleExpr("role")},
+        CASE WHEN COALESCE(is_active, 1) = 1 THEN 'ACTIVE' ELSE 'DISABLED' END,
+        created_at,
+        COALESCE(updated_at, created_at),
+        last_login_at
+      FROM users;
+    DROP TABLE users;
+    ALTER TABLE users_next RENAME TO users;
+  `);
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS applications (
@@ -476,21 +519,21 @@ if (!tableSql("collection_actions").includes("REQUEST_RESTORE")) {
   `);
 }
 
-if (!tableSql("audit").includes("'client'") || !tableSql("audit").includes("FINANCIAL_CONTROLLER") || !tableSql("audit").includes("'application'")) {
+if (!tableSql("audit").includes("'client'") || !tableSql("audit").includes("'SALES'") || !tableSql("audit").includes("'application'") || !tableSql("audit").includes("'user'")) {
   db.exec(`
     CREATE TABLE audit_next (
       id TEXT PRIMARY KEY,
       ts TEXT NOT NULL,
       actor_id TEXT NOT NULL,
-      actor_role TEXT NOT NULL CHECK (actor_role IN ('ADMIN', 'CEO', 'FINANCIAL_CONTROLLER', 'COLLECTIONS', 'OPS')),
-      entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert', 'application')),
+      actor_role TEXT NOT NULL CHECK (actor_role IN ('ADMIN', 'SALES', 'FINANCE', 'COLLECTIONS_AGENT', 'OPS', 'CONTROLLER', 'VIEWER')),
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert', 'application', 'user')),
       entity_id TEXT NOT NULL,
       action TEXT NOT NULL,
       before_json TEXT,
       after_json TEXT
     );
     INSERT INTO audit_next (id, ts, actor_id, actor_role, entity_type, entity_id, action, before_json, after_json)
-      SELECT id, ts, actor_id, actor_role, entity_type, entity_id, action, before_json, after_json FROM audit;
+      SELECT id, ts, actor_id, ${roleExpr("actor_role")}, entity_type, entity_id, action, before_json, after_json FROM audit;
     DROP TABLE audit;
     ALTER TABLE audit_next RENAME TO audit;
   `);

@@ -8,6 +8,27 @@ export interface ActorPayload {
   actor_role: Role;
 }
 
+export type UserStatus = "ACTIVE" | "DISABLED";
+
+export interface ManagedUser {
+  id: string;
+  full_name: string;
+  email: string;
+  role: Role;
+  status: UserStatus;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+}
+
+export type UserPayload = {
+  full_name: string;
+  email: string;
+  role: Role;
+  status: UserStatus;
+  password?: string;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = path.startsWith("http") ? path : `${API}${path}`;
 
@@ -411,9 +432,25 @@ export const api = {
     refresh();
     return result;
   },
+  getUsers: () => request<{ users: ManagedUser[] }>("/admin/users"),
+  createUser: async (body: UserPayload) => {
+    const result = await request<ManagedUser>("/admin/users", { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  updateUser: async (id: string, body: UserPayload) => {
+    const result = await request<ManagedUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  resetUserPassword: async (id: string, password: string) => {
+    const result = await request<{ ok: boolean }>(`/admin/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) });
+    refresh();
+    return result;
+  },
   getAudit: () => request<AuditEntry[]>("/audit")
 };
 
 export function actorFromUser(user: { id: string; role: Role } | null): ActorPayload {
-  return { actor_id: user?.id ?? "USR-COL", actor_role: user?.role ?? "COLLECTIONS" };
+  return { actor_id: user?.id ?? "USR-COL", actor_role: user?.role ?? "COLLECTIONS_AGENT" };
 }

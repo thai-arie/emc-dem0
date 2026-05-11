@@ -47,7 +47,7 @@ export default function CollectionsWorkspace() {
   const pressureCritical = pendingApprovals.filter((row) => pendingAge(row) >= 30 || isRestorePendingApprovalForCase(row, actions)).length;
   const pressureFailed = rows.filter((row) => row.restore_command_status === "FAILED").length;
 
-  if (role === "OPS" || role === "ADMIN") return <EmptyState title="Collections hidden" hint="This screen is not available for this role." />;
+  if (role && !["ADMIN", "COLLECTIONS_AGENT", "CONTROLLER", "VIEWER"].includes(role)) return <EmptyState title="Collections hidden" hint="This screen is not available for this role." />;
   return (
     <div className="screen">
       <div className="screen-header">

@@ -4,6 +4,7 @@ import Drawer from "../../components/Drawer";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
 import { api, type FinancePartnerStatusRecord, type VehicleCatalogPayload, type VehicleCatalogRecord } from "../../services/api";
+import { useAuth } from "../../store/auth";
 import { useUi } from "../../store/ui";
 import { DetailField, FinanceGate, FinancePill, FinanceSummaryStrip, FinanceTraffic, StockPill, financeStyles } from "./FinanceReferenceShared";
 import { vehicleCatalog as fallbackVehicleCatalog, type VehicleCatalogItem } from "./financeReferenceData";
@@ -101,7 +102,9 @@ export default function VehicleCatalog() {
   const [form, setForm] = useState<VehicleForm>(blankForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const role = useAuth((state) => state.user?.role);
   const toast = useUi((state) => state.addToast);
+  const canManageCatalog = role === "ADMIN";
 
   const rows: CatalogRow[] = useMemo(() => {
     if (vehicles.length) return vehicles.map((record) => ({ ...toVehicleCatalogItem(record), record }));
@@ -211,7 +214,7 @@ export default function VehicleCatalog() {
             <h1 className="screen-title">Vehicle Catalog</h1>
             <p className={financeStyles.intro}>Persisted finance reference for brands and models used during partner intake. These are pricing templates, not live financed assets or GPS devices.</p>
           </div>
-          <button className="primary-button" onClick={openCreate}>+ Add Vehicle</button>
+          {canManageCatalog ? <button className="primary-button" onClick={openCreate}>+ Add Vehicle</button> : null}
         </header>
         {loadError ? <p className={financeStyles.note}>{loadError}</p> : null}
         <FinanceSummaryStrip metrics={summary} />
@@ -220,7 +223,7 @@ export default function VehicleCatalog() {
           <DataTable
             rows={rows}
             rowKey={(row) => row.id}
-            onRowClick={openEdit}
+            onRowClick={canManageCatalog ? openEdit : undefined}
             searchKey={(row) => `${row.brand} ${row.model} ${row.variant ?? ""} ${row.category} ${row.stockStatus}`}
             filters={[
               { label: "Active", predicate: (row) => row.active },

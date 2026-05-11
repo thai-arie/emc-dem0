@@ -7,10 +7,10 @@ export type Action =
   | "alert.acknowledge";
 
 const grants: Record<Action, Role[]> = {
-  "payment.record": ["ADMIN", "COLLECTIONS", "FINANCIAL_CONTROLLER"],
-  "collections.send_sms": ["COLLECTIONS"],
-  "collections.arm_immobilizer": ["COLLECTIONS"],
-  "alert.acknowledge": ["ADMIN", "CEO", "FINANCIAL_CONTROLLER", "COLLECTIONS", "OPS"]
+  "payment.record": ["ADMIN", "COLLECTIONS_AGENT", "FINANCE"],
+  "collections.send_sms": ["COLLECTIONS_AGENT"],
+  "collections.arm_immobilizer": ["OPS"],
+  "alert.acknowledge": ["ADMIN", "FINANCE", "COLLECTIONS_AGENT", "OPS", "CONTROLLER"]
 };
 
 export function can(action: Action, role: Role) {

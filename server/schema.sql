@@ -10,11 +10,14 @@ CREATE TABLE IF NOT EXISTS clients (
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
+  full_name TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'CEO', 'FINANCIAL_CONTROLLER', 'COLLECTIONS', 'OPS')),
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL
+  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'SALES', 'FINANCE', 'COLLECTIONS_AGENT', 'OPS', 'CONTROLLER', 'VIEWER')),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_login_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS contracts (
@@ -184,7 +187,7 @@ CREATE TABLE IF NOT EXISTS collections_cases (
 CREATE TABLE IF NOT EXISTS collection_actions (
   id TEXT PRIMARY KEY,
   case_id TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('SMS', 'ARM_IMMOBILIZER', 'SEND_REMINDER', 'CALL_ATTEMPT', 'NOTE', 'REQUEST_IMMOBILIZER', 'APPROVE_IMMOBILIZER')),
+  type TEXT NOT NULL CHECK (type IN ('SMS', 'ARM_IMMOBILIZER', 'SEND_REMINDER', 'CALL_ATTEMPT', 'NOTE', 'REQUEST_IMMOBILIZER', 'APPROVE_IMMOBILIZER', 'REQUEST_RESTORE')),
   performed_by TEXT NOT NULL,
   performed_at TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT ''
@@ -207,8 +210,8 @@ CREATE TABLE IF NOT EXISTS audit (
   id TEXT PRIMARY KEY,
   ts TEXT NOT NULL,
   actor_id TEXT NOT NULL,
-  actor_role TEXT NOT NULL CHECK (actor_role IN ('ADMIN', 'CEO', 'FINANCIAL_CONTROLLER', 'COLLECTIONS', 'OPS')),
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert', 'application')),
+  actor_role TEXT NOT NULL CHECK (actor_role IN ('ADMIN', 'SALES', 'FINANCE', 'COLLECTIONS_AGENT', 'OPS', 'CONTROLLER', 'VIEWER')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('client', 'contract', 'case', 'installment', 'payment', 'vehicle', 'alert', 'application', 'user')),
   entity_id TEXT NOT NULL,
   action TEXT NOT NULL,
   before_json TEXT,

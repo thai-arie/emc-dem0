@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import AppShell from "./layout/AppShell";
+import { routeForRole } from "./roleAccess";
 import Login from "../screens/Login";
 import Overview from "../screens/Overview";
 import ContractsList from "../screens/ContractsList";
@@ -21,6 +22,13 @@ import PricingTiers from "../screens/finance/PricingTiers";
 import FinancialPartners from "../screens/finance/FinancialPartners";
 import InsurancePartners from "../screens/finance/InsurancePartners";
 import BankAccounts from "../screens/finance/BankAccounts";
+import UserManagement from "../screens/admin/UserManagement";
+import { useAuth } from "../store/auth";
+
+function DefaultLanding() {
+  const role = useAuth((state) => state.user?.role);
+  return <Navigate to={routeForRole(role)} replace />;
+}
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -28,7 +36,8 @@ export const router = createBrowserRouter([
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <Overview /> },
+      { index: true, element: <DefaultLanding /> },
+      { path: "overview", element: <Overview /> },
       { path: "contracts", element: <ContractsList /> },
       { path: "contracts/void", element: <VoidedContracts /> },
       { path: "contracts/:id", element: <ContractDetail /> },
@@ -46,6 +55,7 @@ export const router = createBrowserRouter([
       { path: "finance/financial-partners", element: <FinancialPartners /> },
       { path: "finance/insurance-partners", element: <InsurancePartners /> },
       { path: "finance/bank-accounts", element: <BankAccounts /> },
+      { path: "admin/users", element: <UserManagement /> },
       { path: "notifications", element: <Notifications /> },
       { path: "audit", element: <Audit /> }
     ]

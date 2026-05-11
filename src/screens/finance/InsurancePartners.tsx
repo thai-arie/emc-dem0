@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import DataTable from "../../components/DataTable";
 import Drawer from "../../components/Drawer";
 import { api, type FinancePartnerStatusRecord, type InsurancePartnerPayload, type InsurancePartnerRecord } from "../../services/api";
+import { useAuth } from "../../store/auth";
 import { useUi } from "../../store/ui";
 import { toInsurancePartnerOption } from "./financePartnerAdapters";
 import { FinanceGate, FinancePill, FinanceSummaryStrip, FinanceTraffic, financeStyles } from "./FinanceReferenceShared";
@@ -55,7 +56,9 @@ export default function InsurancePartners() {
   const [form, setForm] = useState<PartnerForm>(blankForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const role = useAuth((state) => state.user?.role);
   const toast = useUi((state) => state.addToast);
+  const canManagePartners = role === "ADMIN";
 
   const loadPartners = async () => {
     setLoading(true);
@@ -128,7 +131,7 @@ export default function InsurancePartners() {
             <h1 className="screen-title">Insurance Partners</h1>
             <p className={financeStyles.intro}>Readonly operational screens remain untouched. Insurance partner terms here feed the Application insurance selector only.</p>
           </div>
-          <button className="primary-button" onClick={openCreate}>+ Add Insurance Partner</button>
+          {canManagePartners ? <button className="primary-button" onClick={openCreate}>+ Add Insurance Partner</button> : null}
         </header>
         {error ? <p className={financeStyles.note}>{error}</p> : null}
         <FinanceSummaryStrip metrics={summary} />
@@ -137,7 +140,7 @@ export default function InsurancePartners() {
           <DataTable
             rows={partners}
             rowKey={(row) => row.id}
-            onRowClick={openEdit}
+            onRowClick={canManagePartners ? openEdit : undefined}
             searchKey={(row) => `${row.name} ${row.settlement_timing} ${row.status} ${row.notes}`}
             filters={[
               { label: "Active", predicate: (row) => row.status === "ACTIVE" },

@@ -1,11 +1,15 @@
-export type Role = "ADMIN" | "CEO" | "FINANCIAL_CONTROLLER" | "COLLECTIONS" | "OPS";
+export type Role = "ADMIN" | "SALES" | "FINANCE" | "COLLECTIONS_AGENT" | "OPS" | "CONTROLLER" | "VIEWER";
 
 export interface User {
   id: string;
   email: string;
   full_name: string;
   role: Role;
+  status?: "ACTIVE" | "DISABLED";
   is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  last_login_at?: string | null;
 }
 
 export interface Client {
@@ -138,7 +142,7 @@ export interface AuditEntry {
   ts: string;
   actor_id: string;
   actor_role: Role;
-  entity_type: "client" | "contract" | "case" | "installment" | "payment" | "vehicle" | "alert";
+  entity_type: "client" | "contract" | "case" | "installment" | "payment" | "vehicle" | "alert" | "application" | "user";
   entity_id: string;
   action: string;
   before: unknown | null;

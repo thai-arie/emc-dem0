@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { api } from "../services/api";
 import { useAuth } from "../store/auth";
 import { useNavigate } from "react-router-dom";
+import { routeForRole } from "../app/roleAccess";
 
 export default function Login() {
   const setUser = useAuth((state) => state.setUser);
@@ -19,7 +20,7 @@ export default function Login() {
     try {
       const user = await api.login(email, password);
       setUser(user);
-      navigate("/");
+      navigate(routeForRole(user.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

@@ -13,7 +13,7 @@ export default function Audit() {
         rowKey={(row) => row.id}
         searchKey={(row) => `${row.actor_id} ${row.actor_role} ${row.action} ${row.entity_type} ${row.entity_id}`}
         filters={[
-          { label: "COLLECTIONS", predicate: (row) => row.actor_role === "COLLECTIONS" },
+          { label: "COLLECTIONS", predicate: (row) => row.actor_role === "COLLECTIONS_AGENT" },
           { label: "case", predicate: (row) => row.entity_type === "case" },
           { label: "alert", predicate: (row) => row.entity_type === "alert" }
         ]}

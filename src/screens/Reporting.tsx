@@ -11,7 +11,7 @@ function percent(value: number) {
 
 export default function Reporting() {
   const role = useAuth((state) => state.user?.role);
-  const allowed = role === "ADMIN" || role === "CEO" || role === "FINANCIAL_CONTROLLER";
+  const allowed = role === "ADMIN" || role === "FINANCE" || role === "CONTROLLER" || role === "VIEWER";
   const summary = useApiData(api.getReportingSummary);
   const aging = useApiData(api.getReportingAging);
   const cashflow = useApiData(api.getReportingCashflow);

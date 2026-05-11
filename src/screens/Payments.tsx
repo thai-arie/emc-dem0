@@ -39,7 +39,7 @@ export default function Payments() {
             { key: "due_date", header: "Due date", render: (row) => formatDate(row.due_date) },
             { key: "amount_due", header: "Amount", render: (row) => formatMoney(row.amount_due), sortValue: (row) => row.amount_due },
             { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
-            { key: "action", header: "Action", render: (row) => <RoleGate roles={["COLLECTIONS", "FINANCIAL_CONTROLLER"]}><button className="secondary-button" onClick={(event) => { event.stopPropagation(); setInstallmentId(row.id); setAmount(String(row.amount_due / 100)); setAllocationType(""); setIdempotencyKey(crypto.randomUUID()); }}>Record payment</button></RoleGate> }
+            { key: "action", header: "Action", render: (row) => <RoleGate roles={["COLLECTIONS_AGENT", "FINANCE"]}><button className="secondary-button" onClick={(event) => { event.stopPropagation(); setInstallmentId(row.id); setAmount(String(row.amount_due / 100)); setAllocationType(""); setIdempotencyKey(crypto.randomUUID()); }}>Record payment</button></RoleGate> }
           ]}
         />
       </section>

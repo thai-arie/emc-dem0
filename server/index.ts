@@ -5,9 +5,9 @@ import crypto from "node:crypto";
 import { db, dbPath, nextId, nowIso, audit, rows, row } from "./db";
 import { decideNextAction, decideRestoreAccess } from "./core/decisionEngine";
 
-type Role = "ADMIN" | "CEO" | "FINANCIAL_CONTROLLER" | "COLLECTIONS" | "OPS";
+type Role = "ADMIN" | "SALES" | "FINANCE" | "COLLECTIONS_AGENT" | "OPS" | "CONTROLLER" | "VIEWER";
 type Actor = { actor_id: string; actor_role: Role };
-type SessionUser = { id: string; email: string; role: Role; is_active: number };
+type SessionUser = { id: string; email: string; full_name: string; role: Role; status: "ACTIVE" | "DISABLED"; last_login_at: string | null };
 
 const app = express();
 app.use(cors({ origin: ["http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://127.0.0.1:5175", "http://127.0.0.1:5176", "http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176"], credentials: true }));
@@ -15,7 +15,8 @@ app.use(express.json());
 
 const sessionSecret = process.env.EMC_SESSION_SECRET || "emc-local-session-secret";
 const sessionCookie = "emc_session";
-const authRoles: Role[] = ["ADMIN", "CEO", "FINANCIAL_CONTROLLER", "COLLECTIONS", "OPS"];
+const authRoles: Role[] = ["ADMIN", "SALES", "FINANCE", "COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"];
+const userStatuses = ["ACTIVE", "DISABLED"] as const;
 const overdueGraceDays = 1;
 const telegramNotifyUrl = process.env.TELEGRAM_NOTIFY_URL || "http://127.0.0.1:8081/notify";
 const telegramAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || "174324639";
@@ -193,8 +194,8 @@ function verifySession(token: string | undefined) {
     if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { id: string; role: Role; exp: number };
     if (!authRoles.includes(parsed.role) || parsed.exp < Date.now()) return null;
-    const user = row<SessionUser>("SELECT id, email, role, is_active FROM users WHERE id = ?", [parsed.id]);
-    if (!user || !user.is_active) return null;
+    const user = row<SessionUser>("SELECT id, email, full_name, role, status, last_login_at FROM users WHERE id = ?", [parsed.id]);
+    if (!user || user.status !== "ACTIVE") return null;
     return user;
   } catch {
     return null;
@@ -216,11 +217,11 @@ function actor(req: express.Request): Actor {
 
 function can(action: "payment.record" | "gps.arm" | "contract.create" | "contract.update" | "contract.void" | "payment.reverse", role: Role) {
   if (role === "ADMIN") return true;
-  if (action === "payment.record") return role === "COLLECTIONS" || role === "FINANCIAL_CONTROLLER";
-  if (action === "gps.arm") return role === "COLLECTIONS";
-  if (action === "contract.create") return role === "OPS";
+  if (action === "payment.record") return role === "COLLECTIONS_AGENT" || role === "FINANCE";
+  if (action === "gps.arm") return role === "OPS";
+  if (action === "contract.create") return false;
   if (action === "contract.void") return String(role) === "ADMIN";
-  if (action === "contract.update" || action === "payment.reverse") return role === "FINANCIAL_CONTROLLER";
+  if (action === "contract.update" || action === "payment.reverse") return role === "FINANCE";
   return false;
 }
 
@@ -234,7 +235,7 @@ function requirePermission(req: express.Request, res: express.Response, action: 
 }
 
 function userResponse(user: SessionUser) {
-  return { id: user.id, email: user.email, full_name: user.email, role: user.role, is_active: Boolean(user.is_active) };
+  return { id: user.id, email: user.email, full_name: user.full_name || user.email, role: user.role, status: user.status, is_active: user.status === "ACTIVE", last_login_at: user.last_login_at ?? null };
 }
 
 function jsonGps(gps: any) {
@@ -456,27 +457,35 @@ function seedIfEmpty() {
 }
 
 function seedUsersIfEmpty() {
-  const existing = row<{ count: number }>("SELECT COUNT(*) AS count FROM users")?.count ?? 0;
-  if (existing) return;
   const at = nowIso();
-  const defaults: Array<{ email: string; role: Role }> = [
-    { email: "admin@emc.local", role: "ADMIN" },
-    { email: "ceo@emc.local", role: "CEO" },
-    { email: "controller@emc.local", role: "FINANCIAL_CONTROLLER" },
-    { email: "collections@emc.local", role: "COLLECTIONS" },
-    { email: "ops@emc.local", role: "OPS" }
+  const defaults: Array<{ email: string; full_name: string; role: Role }> = [
+    { email: "admin@emc.local", full_name: "EMC Admin", role: "ADMIN" },
+    { email: "sales@emc.local", full_name: "Sales Intake", role: "SALES" },
+    { email: "finance@emc.local", full_name: "Finance Underwriting", role: "FINANCE" },
+    { email: "collections@emc.local", full_name: "Collections Agent", role: "COLLECTIONS_AGENT" },
+    { email: "ops@emc.local", full_name: "Operations", role: "OPS" },
+    { email: "controller@emc.local", full_name: "Controller", role: "CONTROLLER" },
+    { email: "viewer@emc.local", full_name: "Readonly Viewer", role: "VIEWER" }
   ];
   const passwordHash = bcrypt.hashSync("123456", 10);
   const tx = db.transaction(() => {
     for (const user of defaults) {
-      db.prepare("INSERT INTO users (id, email, password_hash, role, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-        nextId("USR"),
-        user.email,
-        passwordHash,
-        user.role,
-        1,
-        at
-      );
+      const existing = row<any>("SELECT * FROM users WHERE email = ?", [user.email]);
+      if (existing) {
+        db.prepare("UPDATE users SET full_name = COALESCE(NULLIF(full_name, ''), ?), role = ?, status = COALESCE(NULLIF(status, ''), 'ACTIVE'), updated_at = ? WHERE id = ?").run(user.full_name, user.role, at, existing.id);
+      } else {
+        db.prepare("INSERT INTO users (id, full_name, email, password_hash, role, status, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+          nextId("USR"),
+          user.full_name,
+          user.email,
+          passwordHash,
+          user.role,
+          "ACTIVE",
+          at,
+          at,
+          null
+        );
+      }
     }
   });
   tx();
@@ -500,7 +509,7 @@ function ensureCollectionCase(contractId: string, at: string) {
     db.prepare(
       "INSERT INTO collections_cases (id, contract_id, client_id, status, opened_at, cured_at, next_action_type, next_action_date, assigned_agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(caseId, contract.id, contract.client_id, "OPEN", at, null, "SEND_REMINDER", at, "");
-    audit("USR-COL", "COLLECTIONS", "case", caseId, "collections.case_created", null, created);
+    audit("USR-COL", "COLLECTIONS_AGENT", "case", caseId, "collections.case_created", null, created);
   }
 }
 
@@ -1020,9 +1029,12 @@ repairCorruptedSeedSchedules();
 app.post("/auth/login", (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
-  const user = row<SessionUser & { password_hash: string }>("SELECT id, email, password_hash, role, is_active FROM users WHERE email = ?", [email]);
+  const user = row<SessionUser & { password_hash: string }>("SELECT id, full_name, email, password_hash, role, status, last_login_at FROM users WHERE email = ?", [email]);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: "Invalid email or password" });
-  if (!user.is_active) return res.status(403).json({ error: "User is inactive" });
+  if (user.status !== "ACTIVE") return res.status(403).json({ error: "User is disabled" });
+  const at = nowIso();
+  db.prepare("UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?").run(at, at, user.id);
+  user.last_login_at = at;
   res.cookie(sessionCookie, signSession(user), {
     httpOnly: true,
     sameSite: "lax",
@@ -1049,11 +1061,120 @@ app.post("/auth/logout", (_req, res) => {
 
 app.use(requireAuth);
 
+function requireAdmin(req: express.Request, res: express.Response) {
+  const currentUser = (req as unknown as express.Request & { user: SessionUser }).user;
+  if (currentUser.role !== "ADMIN") {
+    res.status(403).json({ error: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+
+function requireOneOf(req: express.Request, res: express.Response, roles: Role[]) {
+  const currentUser = (req as unknown as express.Request & { user: SessionUser }).user;
+  if (currentUser.role !== "ADMIN" && !roles.includes(currentUser.role)) {
+    res.status(403).json({ error: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+
+function normalizeUserPayload(body: any, existing?: any) {
+  return {
+    full_name: String(body.full_name ?? existing?.full_name ?? "").trim(),
+    email: String(body.email ?? existing?.email ?? "").trim().toLowerCase(),
+    role: String(body.role ?? existing?.role ?? "VIEWER").trim().toUpperCase(),
+    status: String(body.status ?? existing?.status ?? "ACTIVE").trim().toUpperCase()
+  };
+}
+
+function validateUserPayload(payload: any, password?: string, requirePassword = false) {
+  if (!payload.full_name) return "Full name is required";
+  if (!payload.email || !payload.email.includes("@")) return "Valid email is required";
+  if (!authRoles.includes(payload.role)) return "Invalid user role";
+  if (!(userStatuses as readonly string[]).includes(payload.status)) return "Invalid user status";
+  if (requirePassword && !password) return "Password is required";
+  if (password && password.length < 6) return "Password must be at least 6 characters";
+  return null;
+}
+
+app.get("/admin/users", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({
+    users: rows<any>("SELECT id, full_name, email, role, status, created_at, updated_at, last_login_at FROM users ORDER BY role, email")
+  });
+});
+
+app.post("/admin/users", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const currentUser = (req as unknown as express.Request & { user: SessionUser }).user;
+  const password = String(req.body.password || "");
+  const payload = normalizeUserPayload(req.body);
+  const validationError = validateUserPayload(payload, password, true);
+  if (validationError) return res.status(400).json({ error: validationError });
+  if (row<any>("SELECT id FROM users WHERE email = ?", [payload.email])) return res.status(409).json({ error: "Email already exists" });
+  const at = nowIso();
+  const user = { id: nextId("USR"), ...payload, created_at: at, updated_at: at, last_login_at: null };
+  db.transaction(() => {
+    db.prepare("INSERT INTO users (id, full_name, email, password_hash, role, status, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+      user.id,
+      user.full_name,
+      user.email,
+      bcrypt.hashSync(password, 10),
+      user.role,
+      user.status,
+      user.created_at,
+      user.updated_at,
+      user.last_login_at
+    );
+    audit(currentUser.id, currentUser.role, "user", user.id, "user.created", null, user);
+  })();
+  res.status(201).json(user);
+});
+
+app.patch("/admin/users/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const currentUser = (req as unknown as express.Request & { user: SessionUser }).user;
+  const existing = row<any>("SELECT id, full_name, email, role, status, created_at, updated_at, last_login_at FROM users WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "User not found" });
+  const payload = normalizeUserPayload(req.body, existing);
+  const validationError = validateUserPayload(payload);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const duplicate = row<any>("SELECT id FROM users WHERE email = ? AND id != ?", [payload.email, existing.id]);
+  if (duplicate) return res.status(409).json({ error: "Email already exists" });
+  const at = nowIso();
+  const after = { ...existing, ...payload, updated_at: at };
+  db.transaction(() => {
+    db.prepare("UPDATE users SET full_name = ?, email = ?, role = ?, status = ?, updated_at = ? WHERE id = ?").run(after.full_name, after.email, after.role, after.status, after.updated_at, existing.id);
+    audit(currentUser.id, currentUser.role, "user", existing.id, "user.updated", existing, after);
+    if (existing.role !== after.role) audit(currentUser.id, currentUser.role, "user", existing.id, "user.role_changed", { role: existing.role }, { role: after.role });
+    if (existing.status !== "DISABLED" && after.status === "DISABLED") audit(currentUser.id, currentUser.role, "user", existing.id, "user.disabled", { status: existing.status }, { status: after.status });
+  })();
+  res.json(after);
+});
+
+app.post("/admin/users/:id/reset-password", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const currentUser = (req as unknown as express.Request & { user: SessionUser }).user;
+  const existing = row<any>("SELECT id, full_name, email, role, status, created_at, updated_at, last_login_at FROM users WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "User not found" });
+  const password = String(req.body.password || "");
+  const validationError = validateUserPayload(existing, password, true);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const at = nowIso();
+  db.transaction(() => {
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(bcrypt.hashSync(password, 10), at, existing.id);
+    audit(currentUser.id, currentUser.role, "user", existing.id, "user.password_reset", null, { id: existing.id, email: existing.email, updated_at: at });
+  })();
+  res.json({ ok: true });
+});
+
 app.get("/finance/vehicle-catalog", (_req, res) => {
   res.json({ vehicles: rows<any>("SELECT * FROM vehicle_catalog ORDER BY CASE status WHEN 'ACTIVE' THEN 0 ELSE 1 END, brand, model, year") });
 });
 
 app.post("/finance/vehicle-catalog", (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const at = nowIso();
   const payload = normalizeVehicleCatalogPayload(req.body);
   const validationError = validateVehicleCatalogPayload(payload);
@@ -1084,6 +1205,7 @@ app.post("/finance/vehicle-catalog", (req, res) => {
 });
 
 app.patch("/finance/vehicle-catalog/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const existing = row<any>("SELECT * FROM vehicle_catalog WHERE id = ?", [req.params.id]);
   if (!existing) return res.status(404).json({ error: "Vehicle catalog item not found" });
   const at = nowIso();
@@ -1127,6 +1249,7 @@ app.get("/finance/financial-partners", (_req, res) => {
 });
 
 app.post("/finance/financial-partners", (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const at = nowIso();
   const payload = normalizeFinancialPartnerPayload(req.body);
   const validationError = validateFinancialPartnerPayload(payload);
@@ -1150,6 +1273,7 @@ app.post("/finance/financial-partners", (req, res) => {
 });
 
 app.patch("/finance/financial-partners/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const existing = row<any>("SELECT * FROM financial_partners WHERE id = ?", [req.params.id]);
   if (!existing) return res.status(404).json({ error: "Financial partner not found" });
   const at = nowIso();
@@ -1179,6 +1303,7 @@ app.get("/finance/insurance-partners", (_req, res) => {
 });
 
 app.post("/finance/insurance-partners", (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const at = nowIso();
   const payload = normalizeInsurancePartnerPayload(req.body);
   const validationError = validateInsurancePartnerPayload(payload);
@@ -1202,6 +1327,7 @@ app.post("/finance/insurance-partners", (req, res) => {
 });
 
 app.patch("/finance/insurance-partners/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const existing = row<any>("SELECT * FROM insurance_partners WHERE id = ?", [req.params.id]);
   if (!existing) return res.status(404).json({ error: "Insurance partner not found" });
   const at = nowIso();
@@ -1237,6 +1363,7 @@ app.get("/applications/:id", (req, res) => {
 });
 
 app.post("/applications", (req, res) => {
+  if (!requireOneOf(req, res, ["SALES", "FINANCE"])) return;
   const a = actor(req);
   const at = nowIso();
   const payload = normalizeApplicationPayload(req.body);
@@ -1289,6 +1416,7 @@ app.post("/applications", (req, res) => {
 });
 
 app.patch("/applications/:id", (req, res) => {
+  if (!requireOneOf(req, res, ["SALES", "FINANCE"])) return;
   const a = actor(req);
   const existing = row<any>("SELECT * FROM applications WHERE id = ?", [req.params.id]);
   if (!existing) return res.status(404).json({ error: "Application not found" });
@@ -1379,7 +1507,7 @@ app.get("/contracts", (_req, res) => {
 });
 
 app.get("/contracts/void", (req, res) => {
-  if (!requirePermission(req, res, "contract.update")) return;
+  if (!requireAdmin(req, res)) return;
 
   const rows = db.prepare(`
     SELECT c.*, cl.full_name as client, cl.phone
@@ -1432,8 +1560,7 @@ app.get("/contracts/:id", (req, res) => {
 });
 
 app.post("/contracts", (req, res) => {
-  // DEMO MODE: bypass permission
-// if (!requirePermission(req, res, "contract.create")) return;
+  if (!requirePermission(req, res, "contract.create")) return;
   const at = nowIso();
   const a = actor(req);
   const startDate = new Date(req.body.start_date || at);
@@ -1707,7 +1834,8 @@ app.post("/payments", (req, res) => {
   res.status(201).json(payment);
 });
 
-app.get("/collections", (_req, res) => {
+app.get("/collections", (req, res) => {
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"])) return;
   refreshOverdueState();
   reconcileGpsStatusFromCommands();
   const cases = rows<any>(
@@ -1773,6 +1901,7 @@ app.get("/collections", (_req, res) => {
 
 
 app.get("/collections/:id/gps-commands", (req, res) => {
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"])) return;
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   if (!kase) return res.status(404).json({ error: "Case not found" });
 
@@ -1794,7 +1923,7 @@ app.get("/collections/:id/gps-commands", (req, res) => {
 
 app.post("/collections/:id/sms", (req, res) => {
   const a = actor(req);
-  if (!requirePermission(req, res, "gps.arm")) return;
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT"])) return;
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   if (!kase || kase.status !== "OPEN") return res.status(409).json({ error: "Invalid case transition" });
   const at = nowIso();
@@ -1810,7 +1939,7 @@ app.post("/collections/:id/sms", (req, res) => {
 
 app.post("/collections/:id/actions", (req, res) => {
   const a = actor(req);
-  if (!requirePermission(req, res, "gps.arm")) return;
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT"])) return;
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   const note = String(req.body.note || "");
   const rawType = String(req.body.type || "").trim().toUpperCase();
@@ -1863,7 +1992,7 @@ app.post("/collections/:id/actions", (req, res) => {
 
 app.post("/collections/:id/approve-immobilizer", (req, res) => {
   const a = actor(req);
-  if (a.actor_role !== "FINANCIAL_CONTROLLER") return res.status(403).json({ error: "Forbidden" });
+  if (a.actor_role !== "CONTROLLER" && a.actor_role !== "ADMIN") return res.status(403).json({ error: "Forbidden" });
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   if (!kase || kase.status !== "OPEN") return res.status(409).json({ error: "Invalid case transition" });
   const at = nowIso();
@@ -1906,7 +2035,7 @@ app.post("/collections/:id/approve-immobilizer", (req, res) => {
 
 app.post("/collections/:id/immobilize", (req, res) => {
   const a = actor(req);
-  if (!requirePermission(req, res, "gps.arm")) return;
+  if (!requireOneOf(req, res, ["OPS"])) return;
   reconcileGpsStatusFromCommands();
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   if (!kase) return res.status(404).json({ error: "Case not found" });
@@ -1950,7 +2079,7 @@ app.post("/collections/:id/immobilize", (req, res) => {
 
 app.post("/collections/:id/approve-restore", (req, res) => {
   const a = actor(req);
-  if (!["ADMIN", "FINANCIAL_CONTROLLER", "OPS"].includes(a.actor_role)) return res.status(403).json({ error: "Forbidden" });
+  if (!["ADMIN", "CONTROLLER"].includes(a.actor_role)) return res.status(403).json({ error: "Forbidden" });
   reconcileGpsStatusFromCommands();
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   if (!kase) return res.status(404).json({ error: "Case not found" });
@@ -1986,7 +2115,7 @@ app.post("/collections/:id/approve-restore", (req, res) => {
 
 app.post("/collections/:id/restore-access", (req, res) => {
   const a = actor(req);
-  if (!["ADMIN", "COLLECTIONS", "OPS"].includes(a.actor_role)) return res.status(403).json({ error: "Forbidden" });
+  if (!["ADMIN", "OPS"].includes(a.actor_role)) return res.status(403).json({ error: "Forbidden" });
   reconcileGpsStatusFromCommands();
   const kase = row<any>("SELECT * FROM collections_cases WHERE id = ?", [req.params.id]);
   if (!kase) return res.status(404).json({ error: "Case not found" });
@@ -2056,7 +2185,8 @@ app.post("/telegram/link-phone", (req, res) => {
   });
 });
 
-app.get("/gps-live-state", (_req, res) => {
+app.get("/gps-live-state", (req, res) => {
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"])) return;
   const items = rows<any>(`
     SELECT
       c.id AS contract_id,
@@ -2105,7 +2235,8 @@ app.get("/gps-live-state", (_req, res) => {
   });
 });
 
-app.get("/gps", (_req, res) => {
+app.get("/gps", (req, res) => {
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"])) return;
   refreshOverdueState();
   reconcileGpsStatusFromCommands();
   res.json({
@@ -2143,7 +2274,8 @@ cases: rows<any>(`
   });
 });
 
-app.get("/devices", (_req, res) => {
+app.get("/devices", (req, res) => {
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"])) return;
   reconcileGpsStatusFromCommands();
   const devices = rows<any>(
     `SELECT
@@ -2162,6 +2294,7 @@ app.get("/devices", (_req, res) => {
 });
 
 app.get("/devices/:id", (req, res) => {
+  if (!requireOneOf(req, res, ["COLLECTIONS_AGENT", "OPS", "CONTROLLER", "VIEWER"])) return;
   reconcileGpsStatusFromCommands();
   const device = row<any>(
     `SELECT
@@ -2215,6 +2348,7 @@ app.patch("/devices/:id", (req, res) => {
 
 
 app.post("/gps-commands/:id/retry", (req, res) => {
+  if (!requireOneOf(req, res, ["OPS"])) return;
   const a = actor(req);
 
   const command = row<any>("SELECT * FROM gps_commands WHERE id = ?", [req.params.id]);
@@ -2271,23 +2405,27 @@ app.get("/alerts", (_req, res) => {
   res.json(syncDerivedAlerts());
 });
 
-app.get("/reporting/summary", (_req, res) => {
+app.get("/reporting/summary", (req, res) => {
+  if (!requireOneOf(req, res, ["FINANCE", "CONTROLLER", "VIEWER"])) return;
   refreshOverdueState();
   reconcileGpsStatusFromCommands();
   res.json(reportingSummary());
 });
 
-app.get("/reporting/aging", (_req, res) => {
+app.get("/reporting/aging", (req, res) => {
+  if (!requireOneOf(req, res, ["FINANCE", "CONTROLLER", "VIEWER"])) return;
   refreshOverdueState();
   res.json(reportingAging());
 });
 
-app.get("/reporting/cashflow", (_req, res) => {
+app.get("/reporting/cashflow", (req, res) => {
+  if (!requireOneOf(req, res, ["FINANCE", "CONTROLLER", "VIEWER"])) return;
   refreshOverdueState();
   res.json(reportingCashflow());
 });
 
 app.post("/alerts/:id/ack", (req, res) => {
+  if (!requireOneOf(req, res, ["FINANCE", "COLLECTIONS_AGENT", "OPS", "CONTROLLER"])) return;
   const a = actor(req);
   refreshOverdueState();
   syncDerivedAlerts();

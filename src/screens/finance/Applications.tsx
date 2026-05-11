@@ -3,6 +3,7 @@ import DataTable from "../../components/DataTable";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
 import { api, type ApplicationPayload, type ApplicationRecord } from "../../services/api";
+import { useAuth } from "../../store/auth";
 import { useUi } from "../../store/ui";
 import ApplicationDetailDrawer from "./ApplicationDetailDrawer";
 import { calculateDealPreview } from "./applicationDealMath";
@@ -126,6 +127,7 @@ function blankApplication(): FinanceApplication {
 }
 
 export default function Applications() {
+  const role = useAuth((state) => state.user?.role);
   const [selectedApplication, setSelectedApplication] = useState<FinanceApplication | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("edit");
@@ -141,6 +143,7 @@ export default function Applications() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const toast = useUi((state) => state.addToast);
+  const canManageApplications = role === "ADMIN" || role === "SALES" || role === "FINANCE";
 
   const loadApplications = async () => {
     setLoading(true);
@@ -241,7 +244,7 @@ export default function Applications() {
             <h1 className="screen-title">Applications</h1>
             <p className={financeStyles.intro}>Partner intake pipeline for proposed financed vehicle contracts. Saving an application persists intake only and does not create contracts, payments, GPS devices, or collections cases.</p>
           </div>
-          <button className="primary-button" onClick={openNewApplicationDrawer}>+ New Application</button>
+          {canManageApplications ? <button className="primary-button" onClick={openNewApplicationDrawer}>+ New Application</button> : null}
         </header>
         {loadError ? <p className={financeStyles.note}>{loadError}</p> : null}
         <FinanceSummaryStrip metrics={summary} />
@@ -334,7 +337,7 @@ export default function Applications() {
             vehicleCatalogOptions={vehicleCatalogOptions}
             duplicateApplications={applications}
             onClose={closeApplicationDrawer}
-            onSave={saveApplication}
+            onSave={canManageApplications ? saveApplication : undefined}
           />
         ) : null}
       </div>

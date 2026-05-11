@@ -145,6 +145,7 @@ const canRequestRestore =
   !isRestoreInFlightOrExecuted &&
   !isGpsPending;
 const executeRestoreLabel = isRestorePendingApproval ? "Pending restore approval" : "Execute restore";
+const canOperateGpsCommand = role === "ADMIN" || role === "OPS";
 
 // Demo safety model:
 // APPROVED alone is not enough. Vehicle must be stopped and ignition OFF.
@@ -243,7 +244,7 @@ const canImmobilize =
     });
   };
 
-  if (role === "OPS" || role === "ADMIN") return <EmptyState title="Collections hidden" hint="This screen is not available for this role." />;
+  if (role && !["ADMIN", "COLLECTIONS_AGENT", "CONTROLLER", "OPS", "VIEWER"].includes(role)) return <EmptyState title="Collections hidden" hint="This screen is not available for this role." />;
   if (!kase) return <div className="screen-panel">Case not found</div>;
 
   return (
@@ -394,23 +395,25 @@ const canImmobilize =
   canImmobilize ? "COLLECTION_RISK" : (vehicle?.status || kase.gps_status || "-")
 }</p></div>
           <div><strong>Result</strong><p>{canImmobilize ? "SAFE TO IMMOBILIZE" : "BLOCKED"}</p></div>
-          <div>
-            <strong>Demo control</strong>
-            <p>
-              <button
-                className="secondary-button"
-                disabled={!isApprovedForImmobilize || demoSafeStop}
-                onClick={() => {
-                  if (!kase?.contract_id) return;
-                  markContractSafeStopped(kase.contract_id);
-                  setDemoSafeStop(true);
-                  window.dispatchEvent(new Event("emc:data"));
-                }}
-              >
-                Simulate safe stop
-              </button>
-            </p>
-          </div>
+          {canOperateGpsCommand ? (
+            <div>
+              <strong>Demo control</strong>
+              <p>
+                <button
+                  className="secondary-button"
+                  disabled={!isApprovedForImmobilize || demoSafeStop}
+                  onClick={() => {
+                    if (!kase?.contract_id) return;
+                    markContractSafeStopped(kase.contract_id);
+                    setDemoSafeStop(true);
+                    window.dispatchEvent(new Event("emc:data"));
+                  }}
+                >
+                  Simulate safe stop
+                </button>
+              </p>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -454,7 +457,7 @@ const canImmobilize =
         />
       )}
 
-      <RoleGate roles={["COLLECTIONS"]}>
+      <RoleGate roles={["COLLECTIONS_AGENT"]}>
         <section className="screen-panel">
           <h2>Actions</h2>
           <div className="form-grid">
@@ -464,19 +467,29 @@ const canImmobilize =
               <button className="secondary-button" disabled={isGpsPending} onClick={() => logAction("CALL_ATTEMPT")}>Log call</button>
               <button className="secondary-button" disabled={!canSendReminder} onClick={() => logAction("SEND_REMINDER")}>{sendReminderLabel}</button>
               <button className="secondary-button" disabled={!canRequestImmobilizer} onClick={() => logAction("REQUEST_IMMOBILIZER")}>{requestImmobilizerLabel}</button>
-              <button className="primary-button" disabled={!canImmobilize} onClick={executeImmobilizer}>Execute immobilizer</button>
+              <button className="primary-button" disabled>OPS execution required</button>
               {isImmobilized && Number(kase.overdue_amount) <= 0 && !isRestoreApproved && !isRestoreInFlightOrExecuted && (
                 <button className="secondary-button" disabled={!canRequestRestore} onClick={requestRestoreAccess}>
                   {isRestorePendingApproval ? "Pending restore approval" : "Request restore"}
                 </button>
               )}
-              <button className="primary-button" disabled={!isImmobilized || !isRestoreApproved || isGpsPending} onClick={executeRestoreAccess}>{executeRestoreLabel}</button>
+              <button className="primary-button" disabled>OPS restore required</button>
             </div>
           </div>
         </section>
       </RoleGate>
 
-      <RoleGate roles={["FINANCIAL_CONTROLLER"]}>
+      <RoleGate roles={["OPS"]}>
+        <section className="screen-panel">
+          <h2>Operations execution</h2>
+          <div className="button-row">
+            <button className="primary-button" disabled={!canImmobilize} onClick={executeImmobilizer}>Execute immobilizer</button>
+            <button className="primary-button" disabled={!isImmobilized || !isRestoreApproved || isGpsPending} onClick={executeRestoreAccess}>{executeRestoreLabel}</button>
+          </div>
+        </section>
+      </RoleGate>
+
+      <RoleGate roles={["CONTROLLER"]}>
         <section className="screen-panel">
           <h2>Controller approval</h2>
           <div className="button-row">

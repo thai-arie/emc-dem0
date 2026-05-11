@@ -18,6 +18,8 @@ export default function ContractDetail() {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const toast = useUi((state) => state.addToast);
+  const canVoidContract = user?.role === "ADMIN";
+  const canContactClient = user?.role !== "VIEWER";
   const [tab, setTab] = useState<"Overview" | "Schedule" | "Payments" | "Collections" | "Audit">("Overview");
   const [installmentId, setInstallmentId] = useState<string | null>(null);
   const [method, setMethod] = useState<Payment["method"]>("cash");
@@ -80,56 +82,37 @@ export default function ContractDetail() {
         marginBottom: "16px",
         flexWrap: "wrap"
       }}>
-        <a
-          href={`tel:${data.client.phone}`}
-          className="primary-button"
-          style={{ textDecoration: "none" }}
-        >
-          Call
-        </a>
+        {canContactClient ? (
+          <a
+            href={`tel:${data.client.phone}`}
+            className="primary-button"
+            style={{ textDecoration: "none" }}
+          >
+            Call
+          </a>
+        ) : null}
 
-        <button
-          className="secondary-button"
-          onClick={async () => {
-            if (!confirm("Void this contract?")) return;
-
-            const res = await api.voidContract(data.contract.id);
-console.log("VOID CLICK FIRED", res);
-console.log('VOID RAW RESPONSE:', res);
-
-            if (!res?.ok) {
-              const err = res as any;
-
-      const msg =
-        err?.error?.message ||
-        err?.error?.code ||
-        "Void failed";
-
-      
-
-console.log("VOID RESPONSE:", err);
-
-if (!res?.ok) {
-  const msg =
-    err?.error?.message ||
-    err?.error?.code ||
-    String(err) ||
-    "Void failed";
-
-  alert(msg);
-  return;
-}
-
-alert(msg);
-              return;
-            }
-
-            alert("Contract voided");
-            detail.reload();
-          }}
-        >
-          Void
-        </button>
+        {canVoidContract ? (
+          <button
+            className="secondary-button"
+            onClick={async () => {
+              if (!confirm("Void this contract?")) return;
+              try {
+                const res = await api.voidContract(data.contract.id);
+                if (!res?.ok) {
+                  alert("Void failed");
+                  return;
+                }
+                alert("Contract voided");
+                detail.reload();
+              } catch (error) {
+                alert(error instanceof Error ? error.message : "Void failed");
+              }
+            }}
+          >
+            Void
+          </button>
+        ) : null}
 </div>
 
       {caseId && (
@@ -301,7 +284,7 @@ alert(msg);
                   <div className="button-row">
                     <StatusBadge status={row.status} />
                     {actionLabel && String(data.contract.status) !== "VOID" ? (
-                      <RoleGate roles={["COLLECTIONS", "FINANCIAL_CONTROLLER"]}>
+                      <RoleGate roles={["COLLECTIONS_AGENT", "FINANCE"]}>
                         <button
                           className="secondary-button"
                           onClick={(event) => {
