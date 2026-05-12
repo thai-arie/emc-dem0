@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Drawer from "../../components/Drawer";
 import type { Role } from "../../entities/types";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
-import type { ApplicationPayload } from "../../services/api";
+import { api, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
 import { useAuth } from "../../store/auth";
 import ApplicationDealPreview from "./ApplicationDealPreview";
 import { calculateDealPreview, generateInstallmentSchedulePreview } from "./applicationDealMath";
@@ -45,6 +45,42 @@ type Draft = {
   notes: string;
   rejectedReason: string;
 };
+
+type DocumentDraft = {
+  document_type: ApplicationDocumentTypeRecord;
+  status: ApplicationDocumentStatusRecord;
+  file_name: string;
+  storage_key: string;
+  notes: string;
+};
+
+const documentTypes: ApplicationDocumentTypeRecord[] = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "PROOF_OF_INCOME", "PROOF_OF_ADDRESS", "SIGNED_APPLICATION", "VEHICLE_DOCUMENTS", "OTHER"];
+const documentStatuses: ApplicationDocumentStatusRecord[] = ["REQUIRED", "UPLOADED", "REVIEWED", "REJECTED", "WAIVED"];
+const salesDocumentStatuses: ApplicationDocumentStatusRecord[] = ["REQUIRED", "UPLOADED"];
+
+function documentLabel(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function toDocumentDraft(document?: ApplicationDocumentRecord): DocumentDraft {
+  return {
+    document_type: document?.document_type ?? "NATIONAL_ID_OR_PASSPORT",
+    status: document?.status ?? "REQUIRED",
+    file_name: document?.file_name ?? "",
+    storage_key: document?.storage_key ?? "",
+    notes: document?.notes ?? ""
+  };
+}
+
+function toDocumentPayload(draft: DocumentDraft): ApplicationDocumentPayload {
+  return {
+    document_type: draft.document_type,
+    status: draft.status,
+    file_name: draft.file_name.trim() || null,
+    storage_key: draft.storage_key.trim() || null,
+    notes: draft.notes.trim()
+  };
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -136,10 +172,18 @@ export default function ApplicationDetailDrawer({
   const role = useAuth((state) => state.user?.role);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => toDraft(application));
+  const [documents, setDocuments] = useState<ApplicationDocumentRecord[]>([]);
+  const [documentDrafts, setDocumentDrafts] = useState<Record<string, DocumentDraft>>({});
+  const [newDocument, setNewDocument] = useState<DocumentDraft>(() => toDocumentDraft());
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
   const isSales = role === "SALES";
   const canSeeInternalEconomics = role === "ADMIN" || role === "FINANCE";
+  const canReviewDocuments = role === "ADMIN" || role === "FINANCE";
+  const canEditDocuments = role === "ADMIN" || role === "FINANCE" || role === "SALES";
   const canEditStage = role === "ADMIN" || role === "FINANCE";
   const stageOptions: FinanceApplication["stage"][] = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"];
+  const writableDocumentStatuses = canReviewDocuments ? documentStatuses : salesDocumentStatuses;
   const partnerOptions = financialPartnerOptions.length ? financialPartnerOptions : fallbackFinancialPartners;
   const insurerOptions = insurancePartnerOptions.length ? insurancePartnerOptions : fallbackInsurancePartners;
   const vehicleOptions = vehicleCatalogOptions.length ? vehicleCatalogOptions : fallbackVehicleCatalog;
@@ -147,6 +191,28 @@ export default function ApplicationDetailDrawer({
   const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId);
   const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId);
   const selectedAccount = bankAccounts.find((account) => account.id === draft.bankAccountId);
+
+  const loadDocuments = async () => {
+    if (mode === "create" || application.id === "APP-NEW") {
+      setDocuments([]);
+      setDocumentDrafts({});
+      setDocumentError(null);
+      return;
+    }
+    try {
+      const result = await api.getApplicationDocuments(application.id);
+      setDocuments(result.documents);
+      setDocumentDrafts(Object.fromEntries(result.documents.map((document) => [document.id, toDocumentDraft(document)])));
+      setDocumentError(null);
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "Failed to load documents");
+    }
+  };
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [application.id, mode]);
+
   const duplicateWarnings = useMemo(() => {
     const normalize = (value: string) => value.trim().toLowerCase();
     const normalizePhone = (value: string) => value.replace(/\D/g, "");
@@ -327,6 +393,35 @@ export default function ApplicationDetailDrawer({
       await onSave(buildPayload());
     } finally {
       setSaving(false);
+    }
+  };
+
+  const createDocument = async () => {
+    if (!canEditDocuments || mode === "create" || application.id === "APP-NEW") return;
+    setSavingDocumentId("new");
+    try {
+      await api.createApplicationDocument(application.id, toDocumentPayload(newDocument));
+      setNewDocument(toDocumentDraft());
+      await loadDocuments();
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "Failed to create document");
+    } finally {
+      setSavingDocumentId(null);
+    }
+  };
+
+  const updateDocument = async (document: ApplicationDocumentRecord) => {
+    const draftDocument = documentDrafts[document.id];
+    if (!canEditDocuments || !draftDocument) return;
+    if (!canReviewDocuments && !salesDocumentStatuses.includes(draftDocument.status)) return;
+    setSavingDocumentId(document.id);
+    try {
+      await api.updateApplicationDocument(document.id, toDocumentPayload(draftDocument));
+      await loadDocuments();
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "Failed to update document");
+    } finally {
+      setSavingDocumentId(null);
     }
   };
 
@@ -526,6 +621,153 @@ export default function ApplicationDetailDrawer({
             <p>Save is still allowed. Review before progressing this intake.</p>
           </section>
         ) : null}
+
+        <section className={financeStyles.drawerSection}>
+          <h3>Documents / KYC</h3>
+          {mode === "create" || application.id === "APP-NEW" ? <p className={financeStyles.note}>Save the application before adding document metadata.</p> : null}
+          {documentError ? <p className={financeStyles.note}>{documentError}</p> : null}
+          {documents.length ? (
+            <table className={financeStyles.previewTable}>
+              <thead>
+                <tr>
+                  <th>Document type</th>
+                  <th>Status</th>
+                  <th>File name</th>
+                  <th>Notes</th>
+                  <th>Metadata</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((document) => {
+                  const docDraft = documentDrafts[document.id] ?? toDocumentDraft(document);
+                  const statusOptions = canReviewDocuments || salesDocumentStatuses.includes(docDraft.status) ? writableDocumentStatuses : [docDraft.status];
+                  const canSaveThisDocument = canEditDocuments && (canReviewDocuments || salesDocumentStatuses.includes(docDraft.status));
+                  return (
+                    <tr key={document.id}>
+                      <td>
+                        <select
+                          className={financeStyles.compactInput}
+                          disabled={!canEditDocuments}
+                          value={docDraft.document_type}
+                          onChange={(event) =>
+                            setDocumentDrafts((current) => ({
+                              ...current,
+                              [document.id]: { ...docDraft, document_type: event.target.value as ApplicationDocumentTypeRecord }
+                            }))
+                          }
+                        >
+                          {documentTypes.map((type) => (
+                            <option key={type} value={type}>
+                              {documentLabel(type)}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          className={financeStyles.compactInput}
+                          disabled={!canSaveThisDocument}
+                          value={docDraft.status}
+                          onChange={(event) =>
+                            setDocumentDrafts((current) => ({
+                              ...current,
+                              [document.id]: { ...docDraft, status: event.target.value as ApplicationDocumentStatusRecord }
+                            }))
+                          }
+                        >
+                          {statusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          className={financeStyles.compactInput}
+                          disabled={!canEditDocuments}
+                          value={docDraft.file_name}
+                          onChange={(event) =>
+                            setDocumentDrafts((current) => ({
+                              ...current,
+                              [document.id]: { ...docDraft, file_name: event.target.value }
+                            }))
+                          }
+                          placeholder="Manual evidence label"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className={financeStyles.compactInput}
+                          disabled={!canEditDocuments}
+                          value={docDraft.notes}
+                          onChange={(event) =>
+                            setDocumentDrafts((current) => ({
+                              ...current,
+                              [document.id]: { ...docDraft, notes: event.target.value }
+                            }))
+                          }
+                          placeholder="Notes"
+                        />
+                      </td>
+                      <td className={financeStyles.documentMeta}>
+                        {document.uploaded_at ? <span>Uploaded {formatDate(document.uploaded_at)}</span> : <span>Not uploaded</span>}
+                        {document.reviewed_at ? <span>Reviewed {formatDate(document.reviewed_at)}</span> : null}
+                      </td>
+                      <td>
+                        {canEditDocuments ? (
+                          <button className="secondary-button" type="button" disabled={!canSaveThisDocument || savingDocumentId === document.id} onClick={() => updateDocument(document)}>
+                            {savingDocumentId === document.id ? "Saving..." : "Save"}
+                          </button>
+                        ) : (
+                          <FinancePill active={document.status !== "REJECTED"} label={document.status} />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : mode === "create" || application.id === "APP-NEW" ? null : (
+            <p className={financeStyles.note}>No document metadata has been recorded yet.</p>
+          )}
+          {canEditDocuments && mode !== "create" && application.id !== "APP-NEW" ? (
+            <div className={financeStyles.documentCreateGrid}>
+              <label>
+                <span>Document type</span>
+                <select value={newDocument.document_type} onChange={(event) => setNewDocument((current) => ({ ...current, document_type: event.target.value as ApplicationDocumentTypeRecord }))}>
+                  {documentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {documentLabel(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Status</span>
+                <select value={newDocument.status} onChange={(event) => setNewDocument((current) => ({ ...current, status: event.target.value as ApplicationDocumentStatusRecord }))}>
+                  {writableDocumentStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>File name</span>
+                <input value={newDocument.file_name} onChange={(event) => setNewDocument((current) => ({ ...current, file_name: event.target.value }))} placeholder="Manual evidence label" />
+              </label>
+              <label>
+                <span>Notes</span>
+                <input value={newDocument.notes} onChange={(event) => setNewDocument((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" />
+              </label>
+              <button className="secondary-button" type="button" disabled={savingDocumentId === "new"} onClick={createDocument}>
+                {savingDocumentId === "new" ? "Adding..." : "Add document"}
+              </button>
+            </div>
+          ) : null}
+        </section>
 
         <section className={financeStyles.drawerSection}>
           <h3>Vehicle</h3>

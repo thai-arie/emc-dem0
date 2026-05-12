@@ -510,6 +510,55 @@
   background: rgba(5, 11, 22, 0.18);
 }
 
+.compactInput {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(126, 166, 201, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(4, 10, 20, 0.72);
+  color: var(--color-text);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.documentMeta {
+  display: grid;
+  gap: 4px;
+  color: var(--color-muted-strong);
+  font-size: 10px;
+}
+
+.documentCreateGrid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.documentCreateGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.documentCreateGrid input,
+.documentCreateGrid select {
+  min-width: 0;
+  border: 1px solid rgba(126, 166, 201, 0.22);
+  border-radius: var(--radius);
+  background: rgba(4, 10, 20, 0.78);
+  color: var(--color-text);
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 780;
+}
+
 .previewTable tbody tr:last-child td {
   border-bottom: 0;
 }
@@ -609,7 +658,8 @@
   .filterGrid,
   .previewGrid,
   .compositionGrid,
-  .opsBridgeGrid {
+  .opsBridgeGrid,
+  .documentCreateGrid {
     grid-template-columns: 1fr;
   }
 }

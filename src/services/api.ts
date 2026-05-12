@@ -143,6 +143,8 @@ export interface CashflowRow {
 }
 
 export type ApplicationStageRecord = "DRAFT" | "DOCS_PENDING" | "BANK_REVIEW" | "READY_TO_SIGN" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type ApplicationDocumentTypeRecord = "NATIONAL_ID_OR_PASSPORT" | "DRIVER_LICENSE" | "PROOF_OF_INCOME" | "PROOF_OF_ADDRESS" | "SIGNED_APPLICATION" | "VEHICLE_DOCUMENTS" | "OTHER";
+export type ApplicationDocumentStatusRecord = "REQUIRED" | "UPLOADED" | "REVIEWED" | "REJECTED" | "WAIVED";
 export type FinancePartnerStatusRecord = "ACTIVE" | "INACTIVE";
 
 export interface ApplicationRecord {
@@ -176,6 +178,22 @@ export interface ApplicationRecord {
 }
 
 export type ApplicationPayload = Omit<ApplicationRecord, "id" | "created_at" | "updated_at">;
+
+export interface ApplicationDocumentRecord {
+  id: string;
+  application_id: string;
+  document_type: ApplicationDocumentTypeRecord;
+  status: ApplicationDocumentStatusRecord;
+  file_name: string | null;
+  storage_key: string | null;
+  uploaded_by: string | null;
+  reviewed_by: string | null;
+  uploaded_at: string | null;
+  reviewed_at: string | null;
+  notes: string;
+}
+
+export type ApplicationDocumentPayload = Pick<ApplicationDocumentRecord, "document_type" | "status" | "file_name" | "storage_key" | "notes">;
 
 export interface VehicleCatalogRecord {
   id: string;
@@ -429,6 +447,17 @@ export const api = {
   },
   updateApplication: async (id: string, body: ApplicationPayload) => {
     const result = await request<ApplicationRecord>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  getApplicationDocuments: (applicationId: string) => request<{ documents: ApplicationDocumentRecord[] }>(`/applications/${applicationId}/documents`),
+  createApplicationDocument: async (applicationId: string, body: ApplicationDocumentPayload) => {
+    const result = await request<ApplicationDocumentRecord>(`/applications/${applicationId}/documents`, { method: "POST", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  updateApplicationDocument: async (id: string, body: ApplicationDocumentPayload) => {
+    const result = await request<ApplicationDocumentRecord>(`/application-documents/${id}`, { method: "PATCH", body: JSON.stringify(body) });
     refresh();
     return result;
   },

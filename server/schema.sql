@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS applications (
   rejected_reason TEXT
 );
 
+CREATE TABLE IF NOT EXISTS application_documents (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL,
+  document_type TEXT NOT NULL CHECK (document_type IN ('NATIONAL_ID_OR_PASSPORT', 'DRIVER_LICENSE', 'PROOF_OF_INCOME', 'PROOF_OF_ADDRESS', 'SIGNED_APPLICATION', 'VEHICLE_DOCUMENTS', 'OTHER')),
+  status TEXT NOT NULL CHECK (status IN ('REQUIRED', 'UPLOADED', 'REVIEWED', 'REJECTED', 'WAIVED')),
+  file_name TEXT,
+  storage_key TEXT,
+  uploaded_by TEXT,
+  reviewed_by TEXT,
+  uploaded_at TEXT,
+  reviewed_at TEXT,
+  notes TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS vehicle_catalog (
   id TEXT PRIMARY KEY,
   brand TEXT NOT NULL,

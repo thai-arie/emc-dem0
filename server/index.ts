@@ -267,6 +267,8 @@ function cents(value: unknown) {
 }
 
 const applicationStages = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"] as const;
+const applicationDocumentTypes = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "PROOF_OF_INCOME", "PROOF_OF_ADDRESS", "SIGNED_APPLICATION", "VEHICLE_DOCUMENTS", "OTHER"] as const;
+const applicationDocumentStatuses = ["REQUIRED", "UPLOADED", "REVIEWED", "REJECTED", "WAIVED"] as const;
 const partnerStatuses = ["ACTIVE", "INACTIVE"] as const;
 
 function nullableText(value: unknown) {
@@ -327,6 +329,41 @@ function normalizeApplicationPayload(body: any, existing?: any) {
     notes: String(body.notes ?? existing?.notes ?? "").trim(),
     rejected_reason: nullableText(body.rejected_reason ?? existing?.rejected_reason)
   };
+}
+
+function normalizeApplicationDocumentPayload(body: any, existing?: any) {
+  return {
+    document_type: String(body.document_type ?? existing?.document_type ?? "").trim().toUpperCase(),
+    status: String(body.status ?? existing?.status ?? "REQUIRED").trim().toUpperCase(),
+    file_name: nullableText(body.file_name ?? existing?.file_name),
+    storage_key: nullableText(body.storage_key ?? existing?.storage_key),
+    notes: String(body.notes ?? existing?.notes ?? "").trim()
+  };
+}
+
+function validateApplicationDocumentPayload(payload: any, role: Role) {
+  if (!(applicationDocumentTypes as readonly string[]).includes(payload.document_type)) return "Invalid document type";
+  if (!(applicationDocumentStatuses as readonly string[]).includes(payload.status)) return "Invalid document status";
+  if (role === "SALES" && !["REQUIRED", "UPLOADED"].includes(payload.status)) return "Sales can only mark documents required or uploaded";
+  return null;
+}
+
+function documentMetadataForStatus(payload: any, existing: any | null, actorPayload: Actor, at: string) {
+  const next = {
+    uploaded_by: existing?.uploaded_by ?? null,
+    reviewed_by: existing?.reviewed_by ?? null,
+    uploaded_at: existing?.uploaded_at ?? null,
+    reviewed_at: existing?.reviewed_at ?? null
+  };
+  if (payload.status === "UPLOADED" && (!existing || existing.status !== "UPLOADED" || !existing.uploaded_at)) {
+    next.uploaded_by = actorPayload.actor_id;
+    next.uploaded_at = at;
+  }
+  if (["REVIEWED", "REJECTED", "WAIVED"].includes(payload.status) && (!existing || existing.status !== payload.status || !existing.reviewed_at)) {
+    next.reviewed_by = actorPayload.actor_id;
+    next.reviewed_at = at;
+  }
+  return next;
 }
 
 function validatePartnerStatus(value: unknown) {
@@ -1487,6 +1524,82 @@ app.patch("/applications/:id", (req, res) => {
       audit(a.actor_id, a.actor_role, "application", existing.id, "application.stage_changed", { stage: existing.stage }, { stage: after.stage });
     }
   })();
+  res.json(after);
+});
+
+app.get("/applications/:id/documents", (req, res) => {
+  const application = row<any>("SELECT id FROM applications WHERE id = ?", [req.params.id]);
+  if (!application) return res.status(404).json({ error: "Application not found" });
+  res.json({ documents: rows<any>("SELECT * FROM application_documents WHERE application_id = ? ORDER BY document_type, id", [req.params.id]) });
+});
+
+app.post("/applications/:id/documents", (req, res) => {
+  if (!requireOneOf(req, res, ["SALES", "FINANCE"])) return;
+  const application = row<any>("SELECT id FROM applications WHERE id = ?", [req.params.id]);
+  if (!application) return res.status(404).json({ error: "Application not found" });
+  const a = actor(req);
+  const at = nowIso();
+  const payload = normalizeApplicationDocumentPayload(req.body);
+  const validationError = validateApplicationDocumentPayload(payload, a.actor_role);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const metadata = documentMetadataForStatus(payload, null, a, at);
+  const document = { id: nextId("DOC"), application_id: req.params.id, ...payload, ...metadata };
+  db.prepare(`
+    INSERT INTO application_documents (
+      id, application_id, document_type, status, file_name, storage_key,
+      uploaded_by, reviewed_by, uploaded_at, reviewed_at, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    document.id,
+    document.application_id,
+    document.document_type,
+    document.status,
+    document.file_name,
+    document.storage_key,
+    document.uploaded_by,
+    document.reviewed_by,
+    document.uploaded_at,
+    document.reviewed_at,
+    document.notes
+  );
+  res.status(201).json(document);
+});
+
+app.patch("/application-documents/:id", (req, res) => {
+  if (!requireOneOf(req, res, ["SALES", "FINANCE"])) return;
+  const existing = row<any>("SELECT * FROM application_documents WHERE id = ?", [req.params.id]);
+  if (!existing) return res.status(404).json({ error: "Application document not found" });
+  const a = actor(req);
+  const at = nowIso();
+  const payload = normalizeApplicationDocumentPayload(req.body, existing);
+  const validationError = validateApplicationDocumentPayload(payload, a.actor_role);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const metadata = documentMetadataForStatus(payload, existing, a, at);
+  const after = { ...existing, ...payload, ...metadata };
+  db.prepare(`
+    UPDATE application_documents
+    SET document_type = ?,
+        status = ?,
+        file_name = ?,
+        storage_key = ?,
+        uploaded_by = ?,
+        reviewed_by = ?,
+        uploaded_at = ?,
+        reviewed_at = ?,
+        notes = ?
+    WHERE id = ?
+  `).run(
+    after.document_type,
+    after.status,
+    after.file_name,
+    after.storage_key,
+    after.uploaded_by,
+    after.reviewed_by,
+    after.uploaded_at,
+    after.reviewed_at,
+    after.notes,
+    existing.id
+  );
   res.json(after);
 });
 
