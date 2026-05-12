@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { db, dbPath, nextId, nowIso, audit, rows, row } from "./db";
 import { decideNextAction, decideRestoreAccess } from "./core/decisionEngine";
 
@@ -20,6 +22,17 @@ const userStatuses = ["ACTIVE", "DISABLED"] as const;
 const overdueGraceDays = 1;
 const telegramNotifyUrl = process.env.TELEGRAM_NOTIFY_URL || "http://127.0.0.1:8081/notify";
 const telegramAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || "174324639";
+const applicationDocumentUploadDir = path.join(process.cwd(), "server", "uploads", "application-documents");
+const maxApplicationDocumentUploadBytes = 5 * 1024 * 1024;
+const allowedApplicationDocumentExtensions = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
+const applicationDocumentMimeTypes: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png"
+};
+
+fs.mkdirSync(applicationDocumentUploadDir, { recursive: true });
 
 type TelegramEvent = "SEND_REMINDER" | "APPROVE_IMMOBILIZER" | "EXECUTE_IMMOBILIZER" | "PAYMENT_RECEIVED" | "ACCESS_RESTORED";
 
@@ -364,6 +377,55 @@ function documentMetadataForStatus(payload: any, existing: any | null, actorPayl
     next.reviewed_at = at;
   }
   return next;
+}
+
+function splitMultipartBuffer(buffer: Buffer, boundary: Buffer) {
+  const parts: Buffer[] = [];
+  let start = buffer.indexOf(boundary);
+  while (start !== -1) {
+    start += boundary.length;
+    if (buffer[start] === 45 && buffer[start + 1] === 45) break;
+    if (buffer[start] === 13 && buffer[start + 1] === 10) start += 2;
+    const end = buffer.indexOf(boundary, start);
+    if (end === -1) break;
+    let part = buffer.subarray(start, end);
+    if (part.length >= 2 && part[part.length - 2] === 13 && part[part.length - 1] === 10) {
+      part = part.subarray(0, part.length - 2);
+    }
+    parts.push(part);
+    start = end;
+  }
+  return parts;
+}
+
+function parseSingleMultipartFile(req: express.Request) {
+  const contentType = String(req.headers["content-type"] || "");
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!boundaryMatch) return { error: "Missing multipart boundary" };
+  if (!Buffer.isBuffer(req.body)) return { error: "Invalid upload body" };
+  const boundary = Buffer.from(`--${boundaryMatch[1] || boundaryMatch[2]}`);
+  for (const part of splitMultipartBuffer(req.body, boundary)) {
+    const headerEnd = part.indexOf(Buffer.from("\r\n\r\n"));
+    if (headerEnd < 0) continue;
+    const headerText = part.subarray(0, headerEnd).toString("utf8");
+    const content = part.subarray(headerEnd + 4);
+    const disposition = headerText.match(/content-disposition:[^\r\n]+/i)?.[0] || "";
+    const filenameMatch = disposition.match(/filename="([^"]*)"/i);
+    if (!filenameMatch || !filenameMatch[1]) continue;
+    const contentTypeMatch = headerText.match(/content-type:\s*([^\r\n]+)/i);
+    return {
+      originalName: path.basename(filenameMatch[1]),
+      mimeType: contentTypeMatch?.[1]?.trim() || "application/octet-stream",
+      buffer: content
+    };
+  }
+  return { error: "Upload file is required" };
+}
+
+function safeApplicationDocumentStorageKey(documentId: string, originalName: string) {
+  const extension = path.extname(originalName).toLowerCase();
+  if (!allowedApplicationDocumentExtensions.has(extension)) return null;
+  return `${documentId}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
 }
 
 function validatePartnerStatus(value: unknown) {
@@ -1601,6 +1663,79 @@ app.patch("/application-documents/:id", (req, res) => {
     existing.id
   );
   res.json(after);
+});
+
+app.post(
+  "/application-documents/:id/upload",
+  express.raw({
+    type: (req) => String(req.headers["content-type"] || "").toLowerCase().startsWith("multipart/form-data"),
+    limit: maxApplicationDocumentUploadBytes
+  }),
+  (req, res) => {
+    if (!requireOneOf(req, res, ["SALES", "FINANCE"])) return;
+    const existing = row<any>("SELECT * FROM application_documents WHERE id = ?", [req.params.id]);
+    if (!existing) return res.status(404).json({ error: "Application document not found" });
+
+    const parsed = parseSingleMultipartFile(req);
+    if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+    if (parsed.buffer.length <= 0) return res.status(400).json({ error: "Upload file is empty" });
+    if (parsed.buffer.length > maxApplicationDocumentUploadBytes) return res.status(413).json({ error: "Upload file is too large" });
+
+    const storageKey = safeApplicationDocumentStorageKey(existing.id, parsed.originalName);
+    if (!storageKey) return res.status(400).json({ error: "Only PDF, JPG, JPEG, and PNG files are allowed" });
+
+    const extension = path.extname(storageKey).toLowerCase();
+    const expectedMime = applicationDocumentMimeTypes[extension];
+    if (parsed.mimeType && parsed.mimeType !== "application/octet-stream" && parsed.mimeType !== expectedMime) {
+      return res.status(400).json({ error: "File type does not match allowed formats" });
+    }
+
+    const a = actor(req);
+    const at = nowIso();
+    const targetPath = path.join(applicationDocumentUploadDir, storageKey);
+    const resolvedTarget = path.resolve(targetPath);
+    if (!resolvedTarget.startsWith(`${path.resolve(applicationDocumentUploadDir)}${path.sep}`)) return res.status(400).json({ error: "Invalid storage path" });
+
+    fs.writeFileSync(resolvedTarget, parsed.buffer, { flag: "wx" });
+    const nextStatus = (a.actor_role === "FINANCE" || a.actor_role === "ADMIN") && ["REVIEWED", "REJECTED", "WAIVED"].includes(existing.status) ? existing.status : "UPLOADED";
+    const after = {
+      ...existing,
+      file_name: parsed.originalName,
+      storage_key: storageKey,
+      uploaded_by: a.actor_id,
+      uploaded_at: at,
+      status: nextStatus
+    };
+    db.prepare(`
+      UPDATE application_documents
+      SET file_name = ?,
+          storage_key = ?,
+          uploaded_by = ?,
+          uploaded_at = ?,
+          status = ?
+      WHERE id = ?
+    `).run(after.file_name, after.storage_key, after.uploaded_by, after.uploaded_at, after.status, existing.id);
+    res.json(after);
+  }
+);
+
+app.get("/application-documents/:id/file", (req, res) => {
+  const document = row<any>("SELECT * FROM application_documents WHERE id = ?", [req.params.id]);
+  if (!document) return res.status(404).json({ error: "Application document not found" });
+  if (!document.storage_key) return res.status(404).json({ error: "No file uploaded" });
+
+  const storageKey = path.basename(document.storage_key);
+  if (storageKey !== document.storage_key) return res.status(400).json({ error: "Invalid storage key" });
+  const extension = path.extname(storageKey).toLowerCase();
+  if (!allowedApplicationDocumentExtensions.has(extension)) return res.status(400).json({ error: "Invalid file type" });
+
+  const filePath = path.resolve(applicationDocumentUploadDir, storageKey);
+  if (!filePath.startsWith(`${path.resolve(applicationDocumentUploadDir)}${path.sep}`) || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+  res.setHeader("Content-Type", applicationDocumentMimeTypes[extension] || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(document.file_name || storageKey)}"`);
+  res.sendFile(filePath);
 });
 
 app.get("/contracts", (_req, res) => {

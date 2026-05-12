@@ -3,7 +3,7 @@ import Drawer from "../../components/Drawer";
 import type { Role } from "../../entities/types";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
-import { api, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
+import { api, applicationDocumentFileUrl, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
 import { useAuth } from "../../store/auth";
 import ApplicationDealPreview from "./ApplicationDealPreview";
 import { calculateDealPreview, generateInstallmentSchedulePreview } from "./applicationDealMath";
@@ -178,6 +178,7 @@ export default function ApplicationDetailDrawer({
   const [newDocument, setNewDocument] = useState<DocumentDraft>(() => toDocumentDraft());
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
+  const [uploadingDocumentId, setUploadingDocumentId] = useState<string | null>(null);
   const isSales = role === "SALES";
   const canSeeInternalEconomics = role === "ADMIN" || role === "FINANCE";
   const canReviewDocuments = role === "ADMIN" || role === "FINANCE";
@@ -447,6 +448,20 @@ export default function ApplicationDetailDrawer({
       setDocumentError(error instanceof Error ? error.message : "Failed to update document");
     } finally {
       setSavingDocumentId(null);
+    }
+  };
+
+  const uploadDocumentFile = async (document: ApplicationDocumentRecord, file: File | undefined) => {
+    if (!file) return;
+    setUploadingDocumentId(document.id);
+    setDocumentError(null);
+    try {
+      await api.uploadApplicationDocument(document.id, file);
+      await loadDocuments();
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "Failed to upload document");
+    } finally {
+      setUploadingDocumentId(null);
     }
   };
 
@@ -777,15 +792,36 @@ export default function ApplicationDetailDrawer({
                       <div className={financeStyles.documentRegistryFooter}>
                         <div className={financeStyles.documentMeta}>
                           {document.file_name ? <span>Evidence: {document.file_name}</span> : null}
+                          {document.storage_key ? (
+                            <a href={applicationDocumentFileUrl(document.id)} target="_blank" rel="noreferrer">
+                              View file
+                            </a>
+                          ) : null}
                           {document.notes ? <span>Notes: {document.notes}</span> : null}
                           {document.uploaded_at ? <span>Uploaded {formatDate(document.uploaded_at)}</span> : <span>Not uploaded</span>}
                           {document.reviewed_at ? <span>Reviewed {formatDate(document.reviewed_at)}</span> : null}
                         </div>
-                        {canEditDocuments ? (
-                          <button className="secondary-button" type="button" disabled={!canEditThisDocument || savingDocumentId === document.id} onClick={() => updateDocument(document)}>
-                            {savingDocumentId === document.id ? "Saving..." : "Save metadata"}
-                          </button>
-                        ) : null}
+                        <div className={financeStyles.documentRowActions}>
+                          {canEditThisDocument ? (
+                            <label className={financeStyles.documentUploadControl}>
+                              <span>{uploadingDocumentId === document.id ? "Uploading..." : document.storage_key ? "Replace file" : "Upload file"}</span>
+                              <input
+                                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                disabled={uploadingDocumentId === document.id}
+                                type="file"
+                                onChange={(event) => {
+                                  void uploadDocumentFile(document, event.target.files?.[0]);
+                                  event.currentTarget.value = "";
+                                }}
+                              />
+                            </label>
+                          ) : null}
+                          {canEditDocuments ? (
+                            <button className="secondary-button" type="button" disabled={!canEditThisDocument || savingDocumentId === document.id} onClick={() => updateDocument(document)}>
+                              {savingDocumentId === document.id ? "Saving..." : "Save metadata"}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   );

@@ -33,10 +33,13 @@ server/*before*.sqlite*
 server/*demo*.sqlite-wal
 server/*demo*.sqlite-shm
 
+# Local user uploads
+server/uploads/application-documents/*
+!server/uploads/application-documents/.gitkeep
+
 # Ad hoc source backups
 *.bak*
 *.backup*
 *.before-*
 *.before-*.*
 *.before_*
-

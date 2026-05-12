@@ -50,6 +50,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function upload<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: response.statusText }));
+    if (response.status === 401) {
+      window.localStorage.removeItem("emc.auth.user");
+      if (window.location.pathname !== "/login") window.location.assign("/login");
+    }
+    throw new Error(body.error || response.statusText);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export function applicationDocumentFileUrl(id: string) {
+  return `${API}/application-documents/${encodeURIComponent(id)}/file`;
+}
+
 export function useApiData<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -458,6 +481,13 @@ export const api = {
   },
   updateApplicationDocument: async (id: string, body: ApplicationDocumentPayload) => {
     const result = await request<ApplicationDocumentRecord>(`/application-documents/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    refresh();
+    return result;
+  },
+  uploadApplicationDocument: async (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const result = await upload<ApplicationDocumentRecord>(`/application-documents/${id}/upload`, formData);
     refresh();
     return result;
   },
