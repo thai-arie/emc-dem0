@@ -19,7 +19,7 @@ import {
   type InsurancePartner,
   type VehicleCatalogItem
 } from "./financeReferenceData";
-import { DetailField, financeStyles } from "./FinanceReferenceShared";
+import { DetailField, FinancePill, financeStyles } from "./FinanceReferenceShared";
 
 type Draft = {
   clientFullName: string;
@@ -138,9 +138,8 @@ export default function ApplicationDetailDrawer({
   const [draft, setDraft] = useState<Draft>(() => toDraft(application));
   const isSales = role === "SALES";
   const canSeeInternalEconomics = role === "ADMIN" || role === "FINANCE";
-  const salesStageOptions: FinanceApplication["stage"][] = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW"];
-  const canEditStage = !isSales || salesStageOptions.includes(draft.stage);
-  const stageOptions = isSales ? (salesStageOptions.includes(draft.stage) ? salesStageOptions : [draft.stage]) : Object.keys(applicationStageLabels) as FinanceApplication["stage"][];
+  const canEditStage = role === "ADMIN" || role === "FINANCE";
+  const stageOptions: FinanceApplication["stage"][] = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"];
   const partnerOptions = financialPartnerOptions.length ? financialPartnerOptions : fallbackFinancialPartners;
   const insurerOptions = insurancePartnerOptions.length ? insurancePartnerOptions : fallbackInsurancePartners;
   const vehicleOptions = vehicleCatalogOptions.length ? vehicleCatalogOptions : fallbackVehicleCatalog;
@@ -470,6 +469,35 @@ export default function ApplicationDetailDrawer({
     <Drawer title={`${mode === "create" ? "New Application" : application.id} - ${draft.clientFullName || "Partner intake"}`} onClose={onClose}>
       <div className={financeStyles.drawerStack}>
         <section className={financeStyles.drawerSection}>
+          <h3>Underwriting Status</h3>
+          <div className={financeStyles.controlGrid}>
+            <div className={financeStyles.detailCard}>
+              <span className={financeStyles.detailLabel}>Current stage</span>
+              <span className={financeStyles.detailValue}>
+                <FinancePill active={draft.stage !== "REJECTED" && draft.stage !== "CANCELLED"} label={applicationStageLabels[draft.stage]} />
+              </span>
+            </div>
+            {canEditStage ? (
+              <label>
+                <span>Stage</span>
+                <select value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as FinanceApplication["stage"] }))}>
+                  {stageOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {applicationStageLabels[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className={financeStyles.detailCard}>
+                <span className={financeStyles.detailLabel}>Stage control</span>
+                <span className={financeStyles.detailValue}>{isSales ? "Readonly for Sales intake" : "Readonly for this role"}</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className={financeStyles.drawerSection}>
           <h3>Client</h3>
           <div className={financeStyles.controlGrid}>
             <label>
@@ -483,16 +511,6 @@ export default function ApplicationDetailDrawer({
             <label>
               <span>National ID / passport</span>
               <input value={draft.clientNationalId} onChange={(event) => updateText("clientNationalId", event.target.value)} />
-            </label>
-            <label>
-              <span>Stage</span>
-              <select disabled={!canEditStage} value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as FinanceApplication["stage"] }))}>
-                {stageOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {applicationStageLabels[value]}
-                  </option>
-                ))}
-              </select>
             </label>
           </div>
         </section>
@@ -728,10 +746,12 @@ export default function ApplicationDetailDrawer({
             <span>Notes</span>
             <textarea value={draft.notes} onChange={(event) => updateText("notes", event.target.value)} />
           </label>
-          <label className={financeStyles.fullWidthControl}>
-            <span>Rejected reason</span>
-            <textarea value={draft.rejectedReason} onChange={(event) => updateText("rejectedReason", event.target.value)} />
-          </label>
+          {canEditStage && (draft.stage === "REJECTED" || draft.rejectedReason) ? (
+            <label className={financeStyles.fullWidthControl}>
+              <span>Rejected reason</span>
+              <textarea value={draft.rejectedReason} onChange={(event) => updateText("rejectedReason", event.target.value)} />
+            </label>
+          ) : null}
         </section>
 
         <div className={financeStyles.saveBar}>
