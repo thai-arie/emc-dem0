@@ -57,6 +57,7 @@ type DocumentDraft = {
 const documentTypes: ApplicationDocumentTypeRecord[] = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "PROOF_OF_INCOME", "PROOF_OF_ADDRESS", "SIGNED_APPLICATION", "VEHICLE_DOCUMENTS", "OTHER"];
 const documentStatuses: ApplicationDocumentStatusRecord[] = ["REQUIRED", "UPLOADED", "REVIEWED", "REJECTED", "WAIVED"];
 const salesDocumentStatuses: ApplicationDocumentStatusRecord[] = ["REQUIRED", "UPLOADED"];
+const requiredKycDocumentTypes: ApplicationDocumentTypeRecord[] = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "SIGNED_APPLICATION"];
 
 function documentLabel(value: string) {
   return value.replace(/_/g, " ");
@@ -191,6 +192,30 @@ export default function ApplicationDetailDrawer({
   const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId);
   const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId);
   const selectedAccount = bankAccounts.find((account) => account.id === draft.bankAccountId);
+  const kycSummary = useMemo(() => {
+    const documentsByType = new Map<ApplicationDocumentTypeRecord, ApplicationDocumentRecord[]>();
+    documents.forEach((document) => {
+      documentsByType.set(document.document_type, [...(documentsByType.get(document.document_type) ?? []), document]);
+    });
+    const reviewedOrWaivedRequired = requiredKycDocumentTypes.filter((type) => {
+      const matches = documentsByType.get(type) ?? [];
+      return matches.some((document) => document.status === "REVIEWED" || document.status === "WAIVED");
+    });
+    const missingRequired = requiredKycDocumentTypes.filter((type) => {
+      const matches = documentsByType.get(type) ?? [];
+      return !matches.length || !matches.some((document) => document.status === "REVIEWED" || document.status === "WAIVED");
+    });
+    const rejectedDocuments = documents.filter((document) => document.status === "REJECTED");
+    return {
+      totalRequired: requiredKycDocumentTypes.length,
+      reviewedOrWaivedCount: reviewedOrWaivedRequired.length,
+      missingRequired,
+      missingCount: missingRequired.length,
+      rejectedDocuments,
+      rejectedCount: rejectedDocuments.length,
+      ready: missingRequired.length === 0
+    };
+  }, [documents]);
 
   const loadDocuments = async () => {
     if (mode === "create" || application.id === "APP-NEW") {
@@ -628,6 +653,40 @@ export default function ApplicationDetailDrawer({
           {documentError ? <p className={financeStyles.note}>{documentError}</p> : null}
           {mode !== "create" && application.id !== "APP-NEW" ? (
             <div className={financeStyles.documentRegistry}>
+              <div className={financeStyles.kycSummary}>
+                <div className={financeStyles.kycSummaryHeader}>
+                  <span>KYC</span>
+                  <FinancePill active={kycSummary.ready} label={kycSummary.ready ? "Ready" : "Incomplete"} />
+                </div>
+                <div className={financeStyles.kycSummaryGrid}>
+                  <div>
+                    <span>Required types</span>
+                    <strong>{kycSummary.totalRequired}</strong>
+                  </div>
+                  <div>
+                    <span>Reviewed/Waived</span>
+                    <strong>
+                      {kycSummary.reviewedOrWaivedCount}/{kycSummary.totalRequired}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Missing</span>
+                    <strong>{kycSummary.missingCount}</strong>
+                  </div>
+                  <div>
+                    <span>Rejected</span>
+                    <strong>{kycSummary.rejectedCount}</strong>
+                  </div>
+                </div>
+                {kycSummary.missingRequired.length || kycSummary.rejectedDocuments.length ? (
+                  <div className={financeStyles.kycSummaryNotes}>
+                    {kycSummary.missingRequired.length ? <span>Missing: {kycSummary.missingRequired.map(documentLabel).join(", ")}</span> : null}
+                    {kycSummary.rejectedDocuments.length ? <span className={financeStyles.kycRejected}>Rejected: {kycSummary.rejectedDocuments.map((document) => documentLabel(document.document_type)).join(", ")}</span> : null}
+                  </div>
+                ) : (
+                  <p className={financeStyles.note}>Required KYC document types are reviewed or waived.</p>
+                )}
+              </div>
               <div className={financeStyles.documentRegistryHeader}>
                 <span>Existing document metadata</span>
                 <strong>{documents.length}</strong>
@@ -636,7 +695,7 @@ export default function ApplicationDetailDrawer({
                 documents.map((document) => {
                   const docDraft = documentDrafts[document.id] ?? toDocumentDraft(document);
                   const statusOptions = canReviewDocuments || salesDocumentStatuses.includes(docDraft.status) ? writableDocumentStatuses : [docDraft.status];
-                  const canSaveThisDocument = canEditDocuments && (canReviewDocuments || salesDocumentStatuses.includes(docDraft.status));
+                  const canEditThisDocument = canEditDocuments && (canReviewDocuments || salesDocumentStatuses.includes(docDraft.status));
                   return (
                     <div className={financeStyles.documentRegistryRow} key={document.id}>
                       <div className={financeStyles.documentSummary}>
@@ -648,7 +707,7 @@ export default function ApplicationDetailDrawer({
                           <span>Document type</span>
                           <select
                             className={financeStyles.compactInput}
-                            disabled={!canEditDocuments}
+                            disabled={!canEditThisDocument}
                             value={docDraft.document_type}
                             onChange={(event) =>
                               setDocumentDrafts((current) => ({
@@ -668,7 +727,7 @@ export default function ApplicationDetailDrawer({
                           <span>Status</span>
                           <select
                             className={financeStyles.compactInput}
-                            disabled={!canSaveThisDocument}
+                            disabled={!canEditThisDocument}
                             value={docDraft.status}
                             onChange={(event) =>
                               setDocumentDrafts((current) => ({
@@ -688,7 +747,7 @@ export default function ApplicationDetailDrawer({
                           <span>File name</span>
                           <input
                             className={financeStyles.compactInput}
-                            disabled={!canEditDocuments}
+                            disabled={!canEditThisDocument}
                             value={docDraft.file_name}
                             onChange={(event) =>
                               setDocumentDrafts((current) => ({
@@ -703,7 +762,7 @@ export default function ApplicationDetailDrawer({
                           <span>Notes</span>
                           <input
                             className={financeStyles.compactInput}
-                            disabled={!canEditDocuments}
+                            disabled={!canEditThisDocument}
                             value={docDraft.notes}
                             onChange={(event) =>
                               setDocumentDrafts((current) => ({
@@ -723,7 +782,7 @@ export default function ApplicationDetailDrawer({
                           {document.reviewed_at ? <span>Reviewed {formatDate(document.reviewed_at)}</span> : null}
                         </div>
                         {canEditDocuments ? (
-                          <button className="secondary-button" type="button" disabled={!canSaveThisDocument || savingDocumentId === document.id} onClick={() => updateDocument(document)}>
+                          <button className="secondary-button" type="button" disabled={!canEditThisDocument || savingDocumentId === document.id} onClick={() => updateDocument(document)}>
                             {savingDocumentId === document.id ? "Saving..." : "Save metadata"}
                           </button>
                         ) : null}
