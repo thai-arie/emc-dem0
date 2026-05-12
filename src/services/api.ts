@@ -198,9 +198,11 @@ export interface ApplicationRecord {
   created_at: string;
   updated_at: string;
   rejected_reason: string | null;
+  converted_contract_id: string | null;
+  converted_at: string | null;
 }
 
-export type ApplicationPayload = Omit<ApplicationRecord, "id" | "created_at" | "updated_at">;
+export type ApplicationPayload = Omit<ApplicationRecord, "id" | "created_at" | "updated_at" | "converted_contract_id" | "converted_at">;
 
 export interface ApplicationDocumentRecord {
   id: string;
@@ -217,6 +219,25 @@ export interface ApplicationDocumentRecord {
 }
 
 export type ApplicationDocumentPayload = Pick<ApplicationDocumentRecord, "document_type" | "status" | "file_name" | "storage_key" | "notes">;
+
+export interface ApplicationConversionPreviewResponse {
+  convertible: boolean;
+  errors: string[];
+  warnings: string[];
+  preview: {
+    client_name: string;
+    financed_amount: number;
+    term_months: number;
+    estimated_installments: number;
+    vehicle: {
+      brand: string;
+      model: string;
+      year: number | null;
+    };
+    stage: ApplicationStageRecord;
+    kyc_ready: boolean;
+  };
+}
 
 export interface VehicleCatalogRecord {
   id: string;
@@ -473,6 +494,7 @@ export const api = {
     refresh();
     return result;
   },
+  getApplicationConversionPreview: (id: string) => request<ApplicationConversionPreviewResponse>(`/applications/${id}/conversion-preview`),
   getApplicationDocuments: (applicationId: string) => request<{ documents: ApplicationDocumentRecord[] }>(`/applications/${applicationId}/documents`),
   createApplicationDocument: async (applicationId: string, body: ApplicationDocumentPayload) => {
     const result = await request<ApplicationDocumentRecord>(`/applications/${applicationId}/documents`, { method: "POST", body: JSON.stringify(body) });

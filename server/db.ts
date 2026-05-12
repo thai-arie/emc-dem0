@@ -43,6 +43,8 @@ addColumn("users", "full_name", "TEXT NOT NULL DEFAULT ''");
 addColumn("users", "status", "TEXT NOT NULL DEFAULT 'ACTIVE'");
 addColumn("users", "updated_at", "TEXT NOT NULL DEFAULT ''");
 addColumn("users", "last_login_at", "TEXT");
+addColumn("applications", "converted_contract_id", "TEXT");
+addColumn("applications", "converted_at", "TEXT");
 
 function roleExpr(column = "role") {
   return `CASE ${column}

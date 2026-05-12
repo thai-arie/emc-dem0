@@ -87,7 +87,9 @@ function fromRecord(record: ApplicationRecord): FinanceApplication {
     notes: record.notes,
     stage: record.stage,
     createdAt: record.created_at,
-    rejectedReason: record.rejected_reason ?? undefined
+    rejectedReason: record.rejected_reason ?? undefined,
+    convertedContractId: record.converted_contract_id,
+    convertedAt: record.converted_at
   };
 }
 

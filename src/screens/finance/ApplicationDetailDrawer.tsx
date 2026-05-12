@@ -3,7 +3,7 @@ import Drawer from "../../components/Drawer";
 import type { Role } from "../../entities/types";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
-import { api, applicationDocumentFileUrl, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
+import { api, applicationDocumentFileUrl, type ApplicationConversionPreviewResponse, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
 import { useAuth } from "../../store/auth";
 import ApplicationDealPreview from "./ApplicationDealPreview";
 import { calculateDealPreview, generateInstallmentSchedulePreview } from "./applicationDealMath";
@@ -179,6 +179,8 @@ export default function ApplicationDetailDrawer({
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [savingDocumentId, setSavingDocumentId] = useState<string | null>(null);
   const [uploadingDocumentId, setUploadingDocumentId] = useState<string | null>(null);
+  const [conversionReadiness, setConversionReadiness] = useState<ApplicationConversionPreviewResponse | null>(null);
+  const [conversionReadinessError, setConversionReadinessError] = useState<string | null>(null);
   const isSales = role === "SALES";
   const canSeeInternalEconomics = role === "ADMIN" || role === "FINANCE";
   const canReviewDocuments = role === "ADMIN" || role === "FINANCE";
@@ -238,6 +240,26 @@ export default function ApplicationDetailDrawer({
   useEffect(() => {
     void loadDocuments();
   }, [application.id, mode]);
+
+  const loadConversionReadiness = async () => {
+    if (!canSeeInternalEconomics || mode === "create" || application.id === "APP-NEW") {
+      setConversionReadiness(null);
+      setConversionReadinessError(null);
+      return;
+    }
+    try {
+      const result = await api.getApplicationConversionPreview(application.id);
+      setConversionReadiness(result);
+      setConversionReadinessError(null);
+    } catch (error) {
+      setConversionReadiness(null);
+      setConversionReadinessError(error instanceof Error ? error.message : "Failed to load conversion readiness");
+    }
+  };
+
+  useEffect(() => {
+    void loadConversionReadiness();
+  }, [application.id, mode, canSeeInternalEconomics, documents.map((document) => `${document.id}:${document.document_type}:${document.status}`).join("|")]);
 
   const duplicateWarnings = useMemo(() => {
     const normalize = (value: string) => value.trim().toLowerCase();
@@ -632,6 +654,24 @@ export default function ApplicationDetailDrawer({
           </div>
         </section>
 
+        {application.convertedContractId ? (
+          <section className={financeStyles.drawerSection}>
+            <h3>Conversion Tracking</h3>
+            <div className={financeStyles.controlGrid}>
+              <div className={financeStyles.detailCard}>
+                <span className={financeStyles.detailLabel}>Converted to contract</span>
+                <span className={financeStyles.detailValue}>{application.convertedContractId}</span>
+              </div>
+              {application.convertedAt ? (
+                <div className={financeStyles.detailCard}>
+                  <span className={financeStyles.detailLabel}>Converted at</span>
+                  <span className={financeStyles.detailValue}>{formatDate(application.convertedAt)}</span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
         <section className={financeStyles.drawerSection}>
           <h3>Client</h3>
           <div className={financeStyles.controlGrid}>
@@ -873,6 +913,71 @@ export default function ApplicationDetailDrawer({
             </div>
           ) : null}
         </section>
+
+        {canSeeInternalEconomics ? (
+          <section className={financeStyles.drawerSection}>
+            <h3>Conversion Readiness</h3>
+            {mode === "create" || application.id === "APP-NEW" ? (
+              <p className={financeStyles.note}>Save the application before running conversion readiness.</p>
+            ) : conversionReadinessError ? (
+              <p className={financeStyles.note}>{conversionReadinessError}</p>
+            ) : conversionReadiness ? (
+              <div className={financeStyles.documentRegistry}>
+                <div className={financeStyles.kycSummary}>
+                  <div className={financeStyles.kycSummaryHeader}>
+                    <span>Readiness</span>
+                    <FinancePill active={conversionReadiness.convertible} label={conversionReadiness.convertible ? "Ready" : "Not Ready"} />
+                  </div>
+                  <div className={financeStyles.kycSummaryGrid}>
+                    <div>
+                      <span>Financed</span>
+                      <strong>{formatMoney(conversionReadiness.preview.financed_amount)}</strong>
+                    </div>
+                    <div>
+                      <span>Term</span>
+                      <strong>{conversionReadiness.preview.term_months} mo</strong>
+                    </div>
+                    <div>
+                      <span>Installments</span>
+                      <strong>{conversionReadiness.preview.estimated_installments}</strong>
+                    </div>
+                    <div>
+                      <span>KYC</span>
+                      <strong>{conversionReadiness.preview.kyc_ready ? "Ready" : "Open"}</strong>
+                    </div>
+                  </div>
+                  <div className={financeStyles.kycSummaryNotes}>
+                    <span>Vehicle: {[conversionReadiness.preview.vehicle.brand, conversionReadiness.preview.vehicle.model, conversionReadiness.preview.vehicle.year].filter(Boolean).join(" ") || "Not specified"}</span>
+                    <span>Stage: {applicationStageLabels[conversionReadiness.preview.stage]}</span>
+                  </div>
+                </div>
+                {conversionReadiness.errors.length ? (
+                  <div className={financeStyles.warningPanel}>
+                    <h3>Errors</h3>
+                    <ul>
+                      {conversionReadiness.errors.map((error) => (
+                        <li key={error}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {conversionReadiness.warnings.length ? (
+                  <div className={financeStyles.warningPanel}>
+                    <h3>Warnings</h3>
+                    <ul>
+                      {conversionReadiness.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                    <p>Warnings do not block conversion readiness.</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className={financeStyles.note}>Loading conversion readiness...</p>
+            )}
+          </section>
+        ) : null}
 
         <section className={financeStyles.drawerSection}>
           <h3>Vehicle</h3>

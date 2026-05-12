@@ -31,6 +31,8 @@ export interface FinanceApplication {
   stage: ApplicationStage;
   createdAt: string;
   rejectedReason?: string;
+  convertedContractId?: string | null;
+  convertedAt?: string | null;
   blockedReason?: string;
 }
 

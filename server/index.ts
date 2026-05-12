@@ -282,6 +282,7 @@ function cents(value: unknown) {
 const applicationStages = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"] as const;
 const applicationDocumentTypes = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "PROOF_OF_INCOME", "PROOF_OF_ADDRESS", "SIGNED_APPLICATION", "VEHICLE_DOCUMENTS", "OTHER"] as const;
 const applicationDocumentStatuses = ["REQUIRED", "UPLOADED", "REVIEWED", "REJECTED", "WAIVED"] as const;
+const requiredApplicationKycDocumentTypes = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "SIGNED_APPLICATION"] as const;
 const partnerStatuses = ["ACTIVE", "INACTIVE"] as const;
 
 function nullableText(value: unknown) {
@@ -377,6 +378,13 @@ function documentMetadataForStatus(payload: any, existing: any | null, actorPayl
     next.reviewed_at = at;
   }
   return next;
+}
+
+function documentTypeLabel(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function splitMultipartBuffer(buffer: Buffer, boundary: Buffer) {
@@ -1459,6 +1467,57 @@ app.get("/applications/:id", (req, res) => {
   const application = row<any>("SELECT * FROM applications WHERE id = ?", [req.params.id]);
   if (!application) return res.status(404).json({ error: "Application not found" });
   res.json(application);
+});
+
+app.get("/applications/:id/conversion-preview", (req, res) => {
+  if (!requireOneOf(req, res, ["FINANCE"])) return;
+  const application = row<any>("SELECT * FROM applications WHERE id = ?", [req.params.id]);
+  if (!application) return res.status(404).json({ error: "Application not found" });
+
+  const documents = rows<any>("SELECT * FROM application_documents WHERE application_id = ?", [req.params.id]);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const financedAmount = Number(application.vehicle_price_cents || 0) - Number(application.down_payment_cents || 0);
+
+  if (!["READY_TO_SIGN", "APPROVED"].includes(application.stage)) errors.push("Stage must be READY_TO_SIGN or APPROVED");
+  if (application.converted_contract_id) errors.push("Application is already linked to a converted contract");
+  if (financedAmount <= 0) errors.push("Financed amount must be greater than 0");
+  if (Number(application.term_months || 0) <= 0) errors.push("Term months must be greater than 0");
+  if (!String(application.client_full_name || "").trim()) errors.push("Client full name is required");
+  if (!String(application.client_phone || "").trim()) errors.push("Phone is required");
+
+  const documentsByType = new Map<string, any[]>();
+  documents.forEach((document) => {
+    documentsByType.set(document.document_type, [...(documentsByType.get(document.document_type) ?? []), document]);
+  });
+  const rejectedRequiredDocuments = requiredApplicationKycDocumentTypes.filter((type) => (documentsByType.get(type) ?? []).some((document) => document.status === "REJECTED"));
+  const missingRequiredDocuments = requiredApplicationKycDocumentTypes.filter((type) => !(documentsByType.get(type) ?? []).some((document) => document.status === "REVIEWED" || document.status === "WAIVED"));
+  rejectedRequiredDocuments.forEach((type) => errors.push(`Required document ${documentTypeLabel(type)} is rejected`));
+  missingRequiredDocuments.forEach((type) => errors.push(`Required document ${documentTypeLabel(type)} must be reviewed or waived`));
+  const kycReady = missingRequiredDocuments.length === 0 && rejectedRequiredDocuments.length === 0;
+
+  warnings.push("Missing VIN");
+  warnings.push("Missing plate");
+  warnings.push("Missing GPS assignment");
+
+  res.json({
+    convertible: errors.length === 0,
+    errors,
+    warnings,
+    preview: {
+      client_name: application.client_full_name,
+      financed_amount: financedAmount,
+      term_months: application.term_months,
+      estimated_installments: application.term_months,
+      vehicle: {
+        brand: application.vehicle_brand,
+        model: application.vehicle_model,
+        year: application.vehicle_year
+      },
+      stage: application.stage,
+      kyc_ready: kycReady
+    }
+  });
 });
 
 app.post("/applications", (req, res) => {

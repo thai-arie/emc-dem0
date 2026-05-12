@@ -61,7 +61,9 @@ CREATE TABLE IF NOT EXISTS applications (
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  rejected_reason TEXT
+  rejected_reason TEXT,
+  converted_contract_id TEXT,
+  converted_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS application_documents (
