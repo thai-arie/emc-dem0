@@ -626,145 +626,155 @@ export default function ApplicationDetailDrawer({
           <h3>Documents / KYC</h3>
           {mode === "create" || application.id === "APP-NEW" ? <p className={financeStyles.note}>Save the application before adding document metadata.</p> : null}
           {documentError ? <p className={financeStyles.note}>{documentError}</p> : null}
-          {documents.length ? (
-            <table className={financeStyles.previewTable}>
-              <thead>
-                <tr>
-                  <th>Document type</th>
-                  <th>Status</th>
-                  <th>File name</th>
-                  <th>Notes</th>
-                  <th>Metadata</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((document) => {
+          {mode !== "create" && application.id !== "APP-NEW" ? (
+            <div className={financeStyles.documentRegistry}>
+              <div className={financeStyles.documentRegistryHeader}>
+                <span>Existing document metadata</span>
+                <strong>{documents.length}</strong>
+              </div>
+              {documents.length ? (
+                documents.map((document) => {
                   const docDraft = documentDrafts[document.id] ?? toDocumentDraft(document);
                   const statusOptions = canReviewDocuments || salesDocumentStatuses.includes(docDraft.status) ? writableDocumentStatuses : [docDraft.status];
                   const canSaveThisDocument = canEditDocuments && (canReviewDocuments || salesDocumentStatuses.includes(docDraft.status));
                   return (
-                    <tr key={document.id}>
-                      <td>
-                        <select
-                          className={financeStyles.compactInput}
-                          disabled={!canEditDocuments}
-                          value={docDraft.document_type}
-                          onChange={(event) =>
-                            setDocumentDrafts((current) => ({
-                              ...current,
-                              [document.id]: { ...docDraft, document_type: event.target.value as ApplicationDocumentTypeRecord }
-                            }))
-                          }
-                        >
-                          {documentTypes.map((type) => (
-                            <option key={type} value={type}>
-                              {documentLabel(type)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          className={financeStyles.compactInput}
-                          disabled={!canSaveThisDocument}
-                          value={docDraft.status}
-                          onChange={(event) =>
-                            setDocumentDrafts((current) => ({
-                              ...current,
-                              [document.id]: { ...docDraft, status: event.target.value as ApplicationDocumentStatusRecord }
-                            }))
-                          }
-                        >
-                          {statusOptions.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          className={financeStyles.compactInput}
-                          disabled={!canEditDocuments}
-                          value={docDraft.file_name}
-                          onChange={(event) =>
-                            setDocumentDrafts((current) => ({
-                              ...current,
-                              [document.id]: { ...docDraft, file_name: event.target.value }
-                            }))
-                          }
-                          placeholder="Manual evidence label"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className={financeStyles.compactInput}
-                          disabled={!canEditDocuments}
-                          value={docDraft.notes}
-                          onChange={(event) =>
-                            setDocumentDrafts((current) => ({
-                              ...current,
-                              [document.id]: { ...docDraft, notes: event.target.value }
-                            }))
-                          }
-                          placeholder="Notes"
-                        />
-                      </td>
-                      <td className={financeStyles.documentMeta}>
-                        {document.uploaded_at ? <span>Uploaded {formatDate(document.uploaded_at)}</span> : <span>Not uploaded</span>}
-                        {document.reviewed_at ? <span>Reviewed {formatDate(document.reviewed_at)}</span> : null}
-                      </td>
-                      <td>
+                    <div className={financeStyles.documentRegistryRow} key={document.id}>
+                      <div className={financeStyles.documentSummary}>
+                        <strong>{documentLabel(docDraft.document_type)}</strong>
+                        <FinancePill active={docDraft.status !== "REJECTED"} label={docDraft.status} />
+                      </div>
+                      <div className={financeStyles.documentRegistryFields}>
+                        <label>
+                          <span>Document type</span>
+                          <select
+                            className={financeStyles.compactInput}
+                            disabled={!canEditDocuments}
+                            value={docDraft.document_type}
+                            onChange={(event) =>
+                              setDocumentDrafts((current) => ({
+                                ...current,
+                                [document.id]: { ...docDraft, document_type: event.target.value as ApplicationDocumentTypeRecord }
+                              }))
+                            }
+                          >
+                            {documentTypes.map((type) => (
+                              <option key={type} value={type}>
+                                {documentLabel(type)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Status</span>
+                          <select
+                            className={financeStyles.compactInput}
+                            disabled={!canSaveThisDocument}
+                            value={docDraft.status}
+                            onChange={(event) =>
+                              setDocumentDrafts((current) => ({
+                                ...current,
+                                [document.id]: { ...docDraft, status: event.target.value as ApplicationDocumentStatusRecord }
+                              }))
+                            }
+                          >
+                            {statusOptions.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>File name</span>
+                          <input
+                            className={financeStyles.compactInput}
+                            disabled={!canEditDocuments}
+                            value={docDraft.file_name}
+                            onChange={(event) =>
+                              setDocumentDrafts((current) => ({
+                                ...current,
+                                [document.id]: { ...docDraft, file_name: event.target.value }
+                              }))
+                            }
+                            placeholder="Manual evidence label"
+                          />
+                        </label>
+                        <label>
+                          <span>Notes</span>
+                          <input
+                            className={financeStyles.compactInput}
+                            disabled={!canEditDocuments}
+                            value={docDraft.notes}
+                            onChange={(event) =>
+                              setDocumentDrafts((current) => ({
+                                ...current,
+                                [document.id]: { ...docDraft, notes: event.target.value }
+                              }))
+                            }
+                            placeholder="Notes"
+                          />
+                        </label>
+                      </div>
+                      <div className={financeStyles.documentRegistryFooter}>
+                        <div className={financeStyles.documentMeta}>
+                          {document.file_name ? <span>Evidence: {document.file_name}</span> : null}
+                          {document.notes ? <span>Notes: {document.notes}</span> : null}
+                          {document.uploaded_at ? <span>Uploaded {formatDate(document.uploaded_at)}</span> : <span>Not uploaded</span>}
+                          {document.reviewed_at ? <span>Reviewed {formatDate(document.reviewed_at)}</span> : null}
+                        </div>
                         {canEditDocuments ? (
                           <button className="secondary-button" type="button" disabled={!canSaveThisDocument || savingDocumentId === document.id} onClick={() => updateDocument(document)}>
-                            {savingDocumentId === document.id ? "Saving..." : "Save"}
+                            {savingDocumentId === document.id ? "Saving..." : "Save metadata"}
                           </button>
-                        ) : (
-                          <FinancePill active={document.status !== "REJECTED"} label={document.status} />
-                        )}
-                      </td>
-                    </tr>
+                        ) : null}
+                      </div>
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
-          ) : mode === "create" || application.id === "APP-NEW" ? null : (
-            <p className={financeStyles.note}>No document metadata has been recorded yet.</p>
-          )}
+                })
+              ) : (
+                <p className={financeStyles.note}>No document metadata has been recorded yet.</p>
+              )}
+            </div>
+          ) : null}
           {canEditDocuments && mode !== "create" && application.id !== "APP-NEW" ? (
-            <div className={financeStyles.documentCreateGrid}>
-              <label>
-                <span>Document type</span>
-                <select value={newDocument.document_type} onChange={(event) => setNewDocument((current) => ({ ...current, document_type: event.target.value as ApplicationDocumentTypeRecord }))}>
-                  {documentTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {documentLabel(type)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Status</span>
-                <select value={newDocument.status} onChange={(event) => setNewDocument((current) => ({ ...current, status: event.target.value as ApplicationDocumentStatusRecord }))}>
-                  {writableDocumentStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>File name</span>
-                <input value={newDocument.file_name} onChange={(event) => setNewDocument((current) => ({ ...current, file_name: event.target.value }))} placeholder="Manual evidence label" />
-              </label>
-              <label>
-                <span>Notes</span>
-                <input value={newDocument.notes} onChange={(event) => setNewDocument((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" />
-              </label>
-              <button className="secondary-button" type="button" disabled={savingDocumentId === "new"} onClick={createDocument}>
-                {savingDocumentId === "new" ? "Adding..." : "Add document"}
-              </button>
+            <div className={financeStyles.documentAddPanel}>
+              <div className={financeStyles.documentRegistryHeader}>
+                <span>Add document metadata</span>
+                <strong>No upload</strong>
+              </div>
+              <div className={financeStyles.documentCreateGrid}>
+                <label>
+                  <span>Document type</span>
+                  <select value={newDocument.document_type} onChange={(event) => setNewDocument((current) => ({ ...current, document_type: event.target.value as ApplicationDocumentTypeRecord }))}>
+                    {documentTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {documentLabel(type)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select value={newDocument.status} onChange={(event) => setNewDocument((current) => ({ ...current, status: event.target.value as ApplicationDocumentStatusRecord }))}>
+                    {writableDocumentStatuses.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>File name</span>
+                  <input value={newDocument.file_name} onChange={(event) => setNewDocument((current) => ({ ...current, file_name: event.target.value }))} placeholder="Manual evidence label" />
+                </label>
+                <label>
+                  <span>Notes</span>
+                  <input value={newDocument.notes} onChange={(event) => setNewDocument((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional" />
+                </label>
+                <button className="secondary-button" type="button" disabled={savingDocumentId === "new"} onClick={createDocument}>
+                  {savingDocumentId === "new" ? "Adding..." : "Add document metadata"}
+                </button>
+              </div>
             </div>
           ) : null}
         </section>

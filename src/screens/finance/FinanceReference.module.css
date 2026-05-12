@@ -274,12 +274,15 @@
 .drawerStack {
   display: grid;
   gap: 12px;
+  min-width: 0;
   max-height: calc(100vh - 150px);
+  overflow-x: hidden;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .drawerSection {
+  min-width: 0;
   border: 1px solid rgba(126, 166, 201, 0.16);
   border-radius: var(--radius);
   background:
@@ -440,9 +443,11 @@
   bottom: 0;
   z-index: 2;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   border: 1px solid rgba(56, 216, 196, 0.22);
   border-radius: var(--radius);
   background:
@@ -452,6 +457,7 @@
 }
 
 .saveBar > span {
+  flex: 1 1 220px;
   min-width: 0;
   color: var(--color-muted);
   font-size: 11px;
@@ -460,8 +466,16 @@
 
 .saveBar > div {
   display: flex;
+  flex: 1 1 280px;
+  flex-wrap: wrap;
   gap: 8px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.saveBar > div button {
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .conversionSubsection {
@@ -529,9 +543,81 @@
   font-size: 10px;
 }
 
+.documentRegistry {
+  display: grid;
+  gap: 8px;
+}
+
+.documentRegistryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.documentRegistryHeader strong {
+  color: var(--color-text);
+  font-size: 10px;
+}
+
+.documentRegistryRow,
+.documentAddPanel {
+  border: 1px solid rgba(126, 166, 201, 0.16);
+  border-radius: var(--radius);
+  background: rgba(5, 11, 22, 0.3);
+  padding: 10px;
+}
+
+.documentAddPanel {
+  margin-top: 12px;
+  border-color: rgba(20, 163, 181, 0.22);
+  background: rgba(6, 18, 28, 0.34);
+}
+
+.documentSummary,
+.documentRegistryFooter {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.documentSummary {
+  margin-bottom: 8px;
+}
+
+.documentSummary strong {
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.documentRegistryFields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.documentRegistryFields label {
+  display: grid;
+  gap: 5px;
+  color: var(--color-muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .documentCreateGrid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(180px, 1fr) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
   margin-top: 10px;
@@ -557,6 +643,10 @@
   padding: 9px 10px;
   font: inherit;
   font-weight: 780;
+}
+
+.documentCreateGrid button {
+  justify-self: end;
 }
 
 .previewTable tbody tr:last-child td {
@@ -659,7 +749,13 @@
   .previewGrid,
   .compositionGrid,
   .opsBridgeGrid,
+  .documentRegistryFields,
   .documentCreateGrid {
     grid-template-columns: 1fr;
+  }
+
+  .documentSummary,
+  .documentRegistryFooter {
+    display: grid;
   }
 }
