@@ -67,11 +67,20 @@ const tierDefaults: Record<string, { aprPct: number; downPaymentPct: number; ter
 };
 
 function canViewMargin(role: Role | undefined) {
-  return role === "ADMIN" || role === "FINANCE" || role === "CONTROLLER";
+  return role === "ADMIN" || role === "FINANCE";
 }
 
 function formatPreviewDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function toDraft(application: FinanceApplication): Draft {
@@ -127,12 +136,17 @@ export default function ApplicationDetailDrawer({
   const role = useAuth((state) => state.user?.role);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => toDraft(application));
+  const isSales = role === "SALES";
+  const canSeeInternalEconomics = role === "ADMIN" || role === "FINANCE";
+  const salesStageOptions: FinanceApplication["stage"][] = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW"];
+  const canEditStage = !isSales || salesStageOptions.includes(draft.stage);
+  const stageOptions = isSales ? (salesStageOptions.includes(draft.stage) ? salesStageOptions : [draft.stage]) : Object.keys(applicationStageLabels) as FinanceApplication["stage"][];
   const partnerOptions = financialPartnerOptions.length ? financialPartnerOptions : fallbackFinancialPartners;
   const insurerOptions = insurancePartnerOptions.length ? insurancePartnerOptions : fallbackInsurancePartners;
   const vehicleOptions = vehicleCatalogOptions.length ? vehicleCatalogOptions : fallbackVehicleCatalog;
   const selectedTier = pricingTiers.find((tier) => tier.id === draft.pricingTierId) ?? pricingTiers[0];
-  const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId) ?? partnerOptions[0];
-  const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId) ?? insurerOptions[0];
+  const selectedPartner = partnerOptions.find((partner) => partner.id === draft.financialPartnerId);
+  const selectedInsurance = insurerOptions.find((partner) => partner.id === draft.insurancePartnerId);
   const selectedAccount = bankAccounts.find((account) => account.id === draft.bankAccountId);
   const duplicateWarnings = useMemo(() => {
     const normalize = (value: string) => value.trim().toLowerCase();
@@ -164,7 +178,7 @@ export default function ApplicationDetailDrawer({
 
   const vehiclePrice = Math.max(0, Math.round(draft.vehiclePriceDollars * 100));
   const vehicleCost = Math.max(0, Math.round(draft.vehicleCostDollars * 100));
-  const fundingShare = selectedPartner.fundingType === "Self-funded" ? 0 : application.bankFundingSharePct;
+  const fundingShare = selectedPartner?.fundingType === "Self-funded" ? 0 : application.bankFundingSharePct;
   const preview = useMemo(
     () =>
       calculateDealPreview({
@@ -176,12 +190,12 @@ export default function ApplicationDetailDrawer({
         aprPct: draft.aprPct,
         gpsFeeGross: selectedTier.gpsFee,
         gpsCostGsm: 700,
-        insurancePct: selectedInsurance.premiumPct,
-        insuranceCommissionPct: selectedInsurance.commissionPct,
-        bankCostRatePct: selectedPartner.costRatePct,
+        insurancePct: selectedInsurance?.premiumPct ?? 0,
+        insuranceCommissionPct: selectedInsurance?.commissionPct ?? 0,
+        bankCostRatePct: selectedPartner?.costRatePct ?? 0,
         bankFundingSharePct: fundingShare
       }),
-    [draft.aprPct, draft.downPaymentDollars, draft.downPaymentPct, draft.termMonths, fundingShare, selectedInsurance.commissionPct, selectedInsurance.premiumPct, selectedPartner.costRatePct, selectedTier.gpsFee, vehicleCost, vehiclePrice]
+    [draft.aprPct, draft.downPaymentDollars, draft.downPaymentPct, draft.termMonths, fundingShare, selectedInsurance?.commissionPct, selectedInsurance?.premiumPct, selectedPartner?.costRatePct, selectedTier.gpsFee, vehicleCost, vehiclePrice]
   );
   const installmentPreview = useMemo(
     () =>
@@ -289,17 +303,17 @@ export default function ApplicationDetailDrawer({
     vehicle_model: draft.vehicleModel,
     vehicle_year: draft.vehicleYear || null,
     vehicle_price_cents: preview.vehiclePrice,
-    vehicle_cost_cents: preview.vehicleCost,
+    vehicle_cost_cents: isSales ? application.vehicleCost : preview.vehicleCost,
     down_payment_cents: preview.downPayment,
     down_payment_pct: draft.downPaymentPct,
     term_months: draft.termMonths,
     apr_pct: draft.aprPct,
     pricing_tier_id: draft.pricingTierId || null,
-    financial_partner_id: draft.financialPartnerId || null,
-    insurance_partner_id: draft.insurancePartnerId || null,
-    bank_account_id: draft.bankAccountId || null,
-    bank_funded_amount_cents: preview.bankFundedAmount,
-    emc_funded_amount_cents: preview.emcFundedAmount,
+    financial_partner_id: isSales ? application.financialPartnerId || null : draft.financialPartnerId || null,
+    insurance_partner_id: isSales ? application.insurancePartnerId || null : draft.insurancePartnerId || null,
+    bank_account_id: isSales ? application.bankAccountId || null : draft.bankAccountId || null,
+    bank_funded_amount_cents: isSales ? application.bankFundedAmount ?? null : preview.bankFundedAmount,
+    emc_funded_amount_cents: isSales ? application.emcFundedAmount ?? null : preview.emcFundedAmount,
     settlement_mode: draft.settlementMode,
     closure_mode: draft.closureMode,
     stage: draft.stage,
@@ -315,6 +329,141 @@ export default function ApplicationDetailDrawer({
     } finally {
       setSaving(false);
     }
+  };
+
+  const canPrintSummary = role === "ADMIN" || role === "SALES" || role === "FINANCE";
+
+  const printSummary = () => {
+    const rows: Array<[string, string]> = [
+      ["Application ID", mode === "create" ? "Draft application" : application.id],
+      ["Client name", draft.clientFullName || "-"],
+      ["Phone", draft.clientPhone || "-"],
+      ...(draft.clientNationalId ? ([["National ID", draft.clientNationalId]] as Array<[string, string]>) : []),
+      ["Vehicle", `${draft.vehicleBrand} ${draft.vehicleModel} ${draft.vehicleYear || ""}`.trim() || "-"],
+      ["Sale price", formatMoney(preview.vehiclePrice)],
+      ["Down payment amount", formatMoney(preview.downPayment)],
+      ["Down payment %", `${draft.downPaymentPct.toFixed(2)}%`],
+      ["Financed amount", formatMoney(preview.financedAmount)],
+      ["Term", `${draft.termMonths} months`],
+      ["APR", `${draft.aprPct.toFixed(1)}%`],
+      ["Monthly payment", formatMoney(preview.totalMonthly)],
+      ...(canSeeInternalEconomics && selectedPartner ? ([["Finance partner", selectedPartner.partnerName]] as Array<[string, string]>) : []),
+      ...(canSeeInternalEconomics && selectedInsurance ? ([["Insurance partner", selectedInsurance.insurer]] as Array<[string, string]>) : []),
+      ["Stage", applicationStageLabels[draft.stage]],
+      ...(draft.notes.trim() ? ([["Notes", draft.notes.trim()]] as Array<[string, string]>) : [])
+    ];
+    const summaryWindow = window.open("", "_blank", "width=900,height=1000");
+    if (!summaryWindow) return;
+
+    summaryWindow.opener = null;
+    summaryWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Application Summary - ${escapeHtml(mode === "create" ? "Draft" : application.id)}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              padding: 40px;
+              color: #111827;
+              background: #ffffff;
+              font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+              line-height: 1.45;
+            }
+            .document {
+              max-width: 760px;
+              margin: 0 auto;
+            }
+            .eyebrow {
+              color: #475569;
+              font-size: 11px;
+              font-weight: 800;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+            }
+            h1 {
+              margin: 8px 0 6px;
+              font-size: 28px;
+              line-height: 1.15;
+            }
+            .subtitle {
+              margin: 0 0 24px;
+              color: #475569;
+              font-size: 14px;
+            }
+            .disclaimer {
+              margin: 0 0 24px;
+              padding: 12px 14px;
+              border: 1px solid #cbd5e1;
+              background: #f8fafc;
+              color: #334155;
+              font-size: 13px;
+              font-weight: 700;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #cbd5e1;
+            }
+            th, td {
+              padding: 10px 12px;
+              border-bottom: 1px solid #e2e8f0;
+              text-align: left;
+              vertical-align: top;
+              font-size: 13px;
+            }
+            th {
+              width: 34%;
+              background: #f1f5f9;
+              color: #334155;
+              font-weight: 800;
+            }
+            td {
+              color: #0f172a;
+              font-weight: 650;
+              white-space: pre-wrap;
+            }
+            .footer {
+              margin-top: 24px;
+              color: #64748b;
+              font-size: 11px;
+            }
+            @media print {
+              @page { size: A4; margin: 18mm; }
+              body { padding: 0; }
+              .document { max-width: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <main class="document">
+            <div class="eyebrow">EMC Financing Proposal</div>
+            <h1>Application Summary</h1>
+            <p class="subtitle">Generated ${escapeHtml(formatDate(new Date().toISOString()))}</p>
+            <p class="disclaimer">This is a financing proposal summary, not a final signed contract.</p>
+            <table>
+              <tbody>
+                ${rows
+                  .map(
+                    ([label, value]) => `
+                      <tr>
+                        <th>${escapeHtml(label)}</th>
+                        <td>${escapeHtml(value)}</td>
+                      </tr>
+                    `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+            <p class="footer">For partner review only. Final terms are subject to approval and signed contract documentation.</p>
+          </main>
+        </body>
+      </html>
+    `);
+    summaryWindow.document.close();
+    summaryWindow.focus();
+    window.setTimeout(() => summaryWindow.print(), 150);
   };
 
   return (
@@ -337,10 +486,10 @@ export default function ApplicationDetailDrawer({
             </label>
             <label>
               <span>Stage</span>
-              <select value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as FinanceApplication["stage"] }))}>
-                {Object.entries(applicationStageLabels).map(([value, label]) => (
+              <select disabled={!canEditStage} value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as FinanceApplication["stage"] }))}>
+                {stageOptions.map((value) => (
                   <option key={value} value={value}>
-                    {label}
+                    {applicationStageLabels[value]}
                   </option>
                 ))}
               </select>
@@ -396,10 +545,12 @@ export default function ApplicationDetailDrawer({
               <span>Vehicle price</span>
               <input type="number" min="0" value={draft.vehiclePriceDollars} onChange={(event) => updateVehiclePrice(event.target.value)} />
             </label>
-            <label>
-              <span>Vehicle cost</span>
-              <input type="number" min="0" value={draft.vehicleCostDollars} onChange={(event) => setDraft((current) => ({ ...current, vehicleCostDollars: Math.max(0, Number(event.target.value || 0)) }))} />
-            </label>
+            {canSeeInternalEconomics ? (
+              <label>
+                <span>Vehicle cost</span>
+                <input type="number" min="0" value={draft.vehicleCostDollars} onChange={(event) => setDraft((current) => ({ ...current, vehicleCostDollars: Math.max(0, Number(event.target.value || 0)) }))} />
+              </label>
+            ) : null}
             <div className={financeStyles.downPaymentPair}>
               <label>
                 <span>Down payment ($)</span>
@@ -418,141 +569,158 @@ export default function ApplicationDetailDrawer({
               <span>APR %</span>
               <input type="number" min="0" step="0.1" value={draft.aprPct} onChange={(event) => updateSimpleNumber("aprPct", event.target.value)} />
             </label>
-            <label>
-              <span>Pricing tier</span>
-              <select value={draft.pricingTierId} onChange={(event) => updateTier(event.target.value)}>
-                {pricingTiers.map((tier) => (
-                  <option key={tier.id} value={tier.id}>
-                    {tier.tierName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Financial partner</span>
-              <select value={draft.financialPartnerId} onChange={(event) => setDraft((current) => ({ ...current, financialPartnerId: event.target.value }))}>
-                {partnerOptions.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.partnerName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Insurance partner</span>
-              <select value={draft.insurancePartnerId} onChange={(event) => setDraft((current) => ({ ...current, insurancePartnerId: event.target.value }))}>
-                {insurerOptions.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.insurer}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Bank account</span>
-              <select value={draft.bankAccountId} onChange={(event) => updateText("bankAccountId", event.target.value)}>
-                {bankAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.accountName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {canSeeInternalEconomics ? (
+              <label>
+                <span>Pricing tier</span>
+                <select value={draft.pricingTierId} onChange={(event) => updateTier(event.target.value)}>
+                  {pricingTiers.map((tier) => (
+                    <option key={tier.id} value={tier.id}>
+                      {tier.tierName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {canSeeInternalEconomics ? (
+              <label>
+                <span>Financial partner</span>
+                <select value={draft.financialPartnerId} onChange={(event) => setDraft((current) => ({ ...current, financialPartnerId: event.target.value }))}>
+                  <option value="">Not assigned</option>
+                  {partnerOptions.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.partnerName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {canSeeInternalEconomics ? (
+              <label>
+                <span>Insurance partner</span>
+                <select value={draft.insurancePartnerId} onChange={(event) => setDraft((current) => ({ ...current, insurancePartnerId: event.target.value }))}>
+                  <option value="">Not assigned</option>
+                  {insurerOptions.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.insurer}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {canSeeInternalEconomics ? (
+              <label>
+                <span>Bank account</span>
+                <select value={draft.bankAccountId} onChange={(event) => updateText("bankAccountId", event.target.value)}>
+                  <option value="">Not assigned</option>
+                  {bankAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.accountName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
           <p className={financeStyles.note}>Simulation only. Closing this drawer discards changes and does not create a contract, payment, GPS device, collections case, or audit log.</p>
         </section>
 
-        <section className={financeStyles.drawerSection}>
-          <h3>Partners</h3>
-          <div className={financeStyles.detailGridTwo}>
-            <DetailField label="Pricing tier" value={`${selectedTier.tierName} - ${selectedTier.aprRange}`} />
-            <DetailField label="Financial partner" value={`${selectedPartner.partnerName} (${selectedPartner.costRatePct.toFixed(1)}% cost)`} />
-            <DetailField label="Insurance" value={`${selectedInsurance.insurer} (${selectedInsurance.premiumPct.toFixed(1)}%)`} />
-            <DetailField label="Bank account" value={selectedAccount?.accountName ?? "-"} />
-          </div>
-        </section>
+        {canSeeInternalEconomics ? (
+          <section className={financeStyles.drawerSection}>
+            <h3>Partners</h3>
+            <div className={financeStyles.detailGridTwo}>
+              <DetailField label="Pricing tier" value={`${selectedTier.tierName} - ${selectedTier.aprRange}`} />
+              <DetailField label="Financial partner" value={selectedPartner ? `${selectedPartner.partnerName} (${selectedPartner.costRatePct.toFixed(1)}% cost)` : "Not assigned"} />
+              <DetailField label="Insurance" value={selectedInsurance ? `${selectedInsurance.insurer} (${selectedInsurance.premiumPct.toFixed(1)}%)` : "Not assigned"} />
+              <DetailField label="Bank account" value={selectedAccount?.accountName ?? "-"} />
+            </div>
+          </section>
+        ) : null}
 
-        <section className={financeStyles.drawerSection}>
-          <h3>Funding split</h3>
-          <div className={financeStyles.detailGridTwo}>
-            <DetailField label="Bank funded estimate" value={formatMoney(preview.bankFundedAmount)} />
-            <DetailField label="EMC funded estimate" value={formatMoney(preview.emcFundedAmount)} />
-            <DetailField label="Settlement mode" value={draft.settlementMode} />
-            <DetailField label="Closure mode" value={draft.closureMode} />
-          </div>
-        </section>
+        {canSeeInternalEconomics ? (
+          <section className={financeStyles.drawerSection}>
+            <h3>Funding split</h3>
+            <div className={financeStyles.detailGridTwo}>
+              <DetailField label="Bank funded estimate" value={formatMoney(preview.bankFundedAmount)} />
+              <DetailField label="EMC funded estimate" value={formatMoney(preview.emcFundedAmount)} />
+              <DetailField label="Settlement mode" value={draft.settlementMode} />
+              <DetailField label="Closure mode" value={draft.closureMode} />
+            </div>
+          </section>
+        ) : null}
 
         <section className={financeStyles.drawerSection}>
           <h3>Deal preview</h3>
           <ApplicationDealPreview preview={preview} showMargin={canViewMargin(role)} />
         </section>
 
-        <section className={financeStyles.drawerSection}>
-          <h3>Contract Conversion Preview</h3>
-          <p className={financeStyles.note}>No contract is created in this demo phase. Operational workflows remain inactive until real backend approval is implemented.</p>
-          <div className={financeStyles.detailGridTwo}>
-            <DetailField label="Preview contract ID" value="KT-PREVIEW" />
-            <DetailField label="Client" value={draft.clientFullName} />
-            <DetailField label="Vehicle" value={`${draft.vehicleBrand} ${draft.vehicleModel}`} />
-            <DetailField label="Sale price" value={formatMoney(preview.vehiclePrice)} />
-            <DetailField label="Down payment amount" value={formatMoney(preview.downPayment)} />
-            <DetailField label="Down payment %" value={`${draft.downPaymentPct.toFixed(2)}%`} />
-            <DetailField label="Financed amount" value={formatMoney(preview.financedAmount)} />
-            <DetailField label="APR" value={`${draft.aprPct.toFixed(1)}%`} />
-            <DetailField label="Term" value={`${draft.termMonths} months`} />
-            <DetailField label="Total monthly payment" value={formatMoney(preview.totalMonthly)} />
-            <DetailField label="Pricing tier" value={selectedTier.tierName} />
-            <DetailField label="Financial partner" value={selectedPartner.partnerName} />
-            <DetailField label="Insurance partner" value={selectedInsurance.insurer} />
-            <DetailField label="Funding split" value={`${formatMoney(preview.bankFundedAmount)} bank / ${formatMoney(preview.emcFundedAmount)} EMC`} />
-          </div>
-
-          <div className={financeStyles.conversionSubsection}>
-            <h4>Installment Schedule Preview</h4>
-            <table className={financeStyles.previewTable}>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Due date</th>
-                  <th>Principal</th>
-                  <th>Interest</th>
-                  <th>Total payment</th>
-                  <th>Remaining balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {installmentPreview.map((row) => (
-                  <tr key={row.seqNo}>
-                    <td>{row.seqNo}</td>
-                    <td>{formatPreviewDate(row.dueDate)}</td>
-                    <td>{formatMoney(row.principal)}</td>
-                    <td>{formatMoney(row.interest)}</td>
-                    <td>{formatMoney(row.totalPayment)}</td>
-                    <td>{formatMoney(row.remainingBalance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className={financeStyles.conversionSubsection}>
-            <h4>Operational Attachment Preview</h4>
-            <div className={financeStyles.attachmentGrid}>
-              <span>GPS device</span>
-              <strong>Not assigned</strong>
-              <span>Collections case</span>
-              <strong>Not created</strong>
-              <span>Enforcement status</span>
-              <strong>Inactive</strong>
-              <span>Vehicle control</span>
-              <strong>Disabled until activation</strong>
-              <span>Telegram notifications</span>
-              <strong>Not triggered</strong>
-              <span>Audit</span>
-              <strong>Will be written on real approval</strong>
+        {canSeeInternalEconomics ? (
+          <section className={financeStyles.drawerSection}>
+            <h3>Contract Conversion Preview</h3>
+            <p className={financeStyles.note}>No contract is created in this demo phase. Operational workflows remain inactive until real backend approval is implemented.</p>
+            <div className={financeStyles.detailGridTwo}>
+              <DetailField label="Preview contract ID" value="KT-PREVIEW" />
+              <DetailField label="Client" value={draft.clientFullName} />
+              <DetailField label="Vehicle" value={`${draft.vehicleBrand} ${draft.vehicleModel}`} />
+              <DetailField label="Sale price" value={formatMoney(preview.vehiclePrice)} />
+              <DetailField label="Down payment amount" value={formatMoney(preview.downPayment)} />
+              <DetailField label="Down payment %" value={`${draft.downPaymentPct.toFixed(2)}%`} />
+              <DetailField label="Financed amount" value={formatMoney(preview.financedAmount)} />
+              <DetailField label="APR" value={`${draft.aprPct.toFixed(1)}%`} />
+              <DetailField label="Term" value={`${draft.termMonths} months`} />
+              <DetailField label="Total monthly payment" value={formatMoney(preview.totalMonthly)} />
+              <DetailField label="Pricing tier" value={selectedTier.tierName} />
+              <DetailField label="Financial partner" value={selectedPartner?.partnerName ?? "Not assigned"} />
+              <DetailField label="Insurance partner" value={selectedInsurance?.insurer ?? "Not assigned"} />
+              <DetailField label="Funding split" value={`${formatMoney(preview.bankFundedAmount)} bank / ${formatMoney(preview.emcFundedAmount)} EMC`} />
             </div>
-          </div>
-        </section>
+
+            <div className={financeStyles.conversionSubsection}>
+              <h4>Installment Schedule Preview</h4>
+              <table className={financeStyles.previewTable}>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Due date</th>
+                    <th>Principal</th>
+                    <th>Interest</th>
+                    <th>Total payment</th>
+                    <th>Remaining balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {installmentPreview.map((row) => (
+                    <tr key={row.seqNo}>
+                      <td>{row.seqNo}</td>
+                      <td>{formatPreviewDate(row.dueDate)}</td>
+                      <td>{formatMoney(row.principal)}</td>
+                      <td>{formatMoney(row.interest)}</td>
+                      <td>{formatMoney(row.totalPayment)}</td>
+                      <td>{formatMoney(row.remainingBalance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className={financeStyles.conversionSubsection}>
+              <h4>Operational Attachment Preview</h4>
+              <div className={financeStyles.attachmentGrid}>
+                <span>GPS device</span>
+                <strong>Not assigned</strong>
+                <span>Collections case</span>
+                <strong>Not created</strong>
+                <span>Enforcement status</span>
+                <strong>Inactive</strong>
+                <span>Vehicle control</span>
+                <strong>Disabled until activation</strong>
+                <span>Telegram notifications</span>
+                <strong>Not triggered</strong>
+                <span>Audit</span>
+                <strong>Will be written on real approval</strong>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className={financeStyles.drawerSection}>
           <h3>Internal notes</h3>
@@ -566,17 +734,10 @@ export default function ApplicationDetailDrawer({
           </label>
         </section>
 
-        <section className={financeStyles.drawerSection}>
-          <h3>Decision Placeholder</h3>
-          <div className={financeStyles.disabledActionRow}>
-            <button disabled>Approve application - future</button>
-            <button disabled>Reject application - future</button>
-            <button disabled>Request more docs - future</button>
-          </div>
-        </section>
         <div className={financeStyles.saveBar}>
           <span>{mode === "create" ? "Creates an application record only. No contract or operational workflow is created." : `Last updated ${formatDate(application.createdAt)}`}</span>
           <div>
+            {canPrintSummary ? <button className="secondary-button" type="button" onClick={printSummary}>Print Summary</button> : null}
             <button className="secondary-button" onClick={onClose} disabled={saving}>Cancel</button>
             <button type="button" className="primary-button" onClick={save} disabled={saving || !onSave}>{saving ? "Saving..." : "Save application"}</button>
           </div>

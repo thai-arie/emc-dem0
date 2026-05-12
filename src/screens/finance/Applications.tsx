@@ -94,8 +94,9 @@ function fromRecord(record: ApplicationRecord): FinanceApplication {
   };
 }
 
-function blankApplication(): FinanceApplication {
+function blankApplication(role?: string): FinanceApplication {
   const now = new Date().toISOString();
+  const isSales = role === "SALES";
   return {
     id: "APP-NEW",
     clientFullName: "",
@@ -113,10 +114,10 @@ function blankApplication(): FinanceApplication {
     termMonths: 36,
     aprPct: 18,
     pricingTierId: "basic",
-    financialPartnerId: "fp_icare",
-    insurancePartnerId: "ip_cb",
-    bankAccountId: "ba_icare",
-    bankFundingSharePct: 85,
+    financialPartnerId: isSales ? "" : "fp_icare",
+    insurancePartnerId: isSales ? "" : "ip_cb",
+    bankAccountId: isSales ? "" : "ba_icare",
+    bankFundingSharePct: isSales ? 0 : 85,
     settlementMode: "partner_pass_through",
     closureMode: "standard_signing",
     startDate: now,
@@ -144,6 +145,7 @@ export default function Applications() {
   const [loading, setLoading] = useState(true);
   const toast = useUi((state) => state.addToast);
   const canManageApplications = role === "ADMIN" || role === "SALES" || role === "FINANCE";
+  const isSales = role === "SALES";
 
   const loadApplications = async () => {
     setLoading(true);
@@ -213,7 +215,7 @@ export default function Applications() {
   };
 
   const openNewApplicationDrawer = () => {
-    setSelectedApplication(blankApplication());
+    setSelectedApplication(blankApplication(role));
     setDrawerMode("create");
     setIsDrawerOpen(true);
   };
@@ -272,28 +274,32 @@ export default function Applications() {
                 ))}
               </select>
             </label>
-            <label>
-              <span>Financial partner</span>
-              <select value={financialPartnerFilter} onChange={(event) => setFinancialPartnerFilter(event.target.value)}>
-                <option value="all">All financial partners</option>
-                {financialPartnerOptions.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.partnerName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Insurance partner</span>
-              <select value={insurancePartnerFilter} onChange={(event) => setInsurancePartnerFilter(event.target.value)}>
-                <option value="all">All insurance partners</option>
-                {insurancePartnerOptions.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.insurer}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!isSales ? (
+              <label>
+                <span>Financial partner</span>
+                <select value={financialPartnerFilter} onChange={(event) => setFinancialPartnerFilter(event.target.value)}>
+                  <option value="all">All financial partners</option>
+                  {financialPartnerOptions.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.partnerName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {!isSales ? (
+              <label>
+                <span>Insurance partner</span>
+                <select value={insurancePartnerFilter} onChange={(event) => setInsurancePartnerFilter(event.target.value)}>
+                  <option value="all">All insurance partners</option>
+                  {insurancePartnerOptions.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.insurer}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label>
               <span>Vehicle brand</span>
               <select value={vehicleBrandFilter} onChange={(event) => setVehicleBrandFilter(event.target.value)}>
@@ -322,7 +328,7 @@ export default function Applications() {
               { key: "aprPct", header: "APR", render: (row) => <span className={financeStyles.number}>{row.aprPct.toFixed(1)}%</span>, sortValue: (row) => row.aprPct },
               { key: "downPaymentPct", header: "Down %", render: (row) => <span className={financeStyles.number}>{row.downPaymentPct.toFixed(1)}%</span>, sortValue: (row) => row.downPaymentPct },
               { key: "financedAmount", header: "Financed amount", render: (row) => <span className={financeStyles.money}>{formatMoney(financedAmount(row, financialPartnerOptions, insurancePartnerOptions))}</span>, csvValue: (row) => financedAmount(row, financialPartnerOptions, insurancePartnerOptions), sortValue: (row) => financedAmount(row, financialPartnerOptions, insurancePartnerOptions) },
-              { key: "financialPartnerId", header: "Partner", render: (row) => <span className={financeStyles.tableText}>{partnerName(row.financialPartnerId, financialPartnerOptions)}</span>, csvValue: (row) => partnerName(row.financialPartnerId, financialPartnerOptions) },
+              ...(!isSales ? [{ key: "financialPartnerId", header: "Partner", render: (row: FinanceApplication) => <span className={financeStyles.tableText}>{partnerName(row.financialPartnerId, financialPartnerOptions)}</span>, csvValue: (row: FinanceApplication) => partnerName(row.financialPartnerId, financialPartnerOptions) }] : []),
               { key: "createdAt", header: "Created", render: (row) => formatDate(row.createdAt), sortValue: (row) => row.createdAt }
             ]}
           />
