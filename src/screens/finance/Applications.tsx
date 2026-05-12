@@ -25,10 +25,7 @@ function signalFor(application: FinanceApplication): { label: ApplicationSignal;
 }
 
 function stageTone(stage: ApplicationStage) {
-  if (stage === "APPROVED") return "APPROVED";
-  if (stage === "REJECTED") return "REJECTED";
-  if (stage === "CANCELLED") return "CANCELLED";
-  return applicationStageLabels[stage].toUpperCase();
+  return stage;
 }
 
 function partnerName(id: string, partners: FinancialPartner[]) {
@@ -320,15 +317,15 @@ export default function Applications() {
             exportCSV="finance-applications.csv"
             columns={[
               { key: "signal", header: "Signal", render: (row) => <FinanceTraffic tone={signalFor(row).tone} label={signalFor(row).label} />, sortValue: (row) => signalFor(row).label },
-              { key: "id", header: "Application ID", render: (row) => <span className={financeStyles.tableText}>{row.id}</span> },
+              { key: "id", header: "Application ID", render: (row) => <span className={financeStyles.tableId}>{row.id}</span> },
               { key: "clientFullName", header: "Client" },
-              { key: "vehicle", header: "Vehicle", render: (row) => `${row.vehicleBrand} ${row.vehicleModel}`, csvValue: (row) => `${row.vehicleBrand} ${row.vehicleModel}` },
-              { key: "stage", header: "Stage", render: (row) => <FinancePill active={row.stage !== "REJECTED" && row.stage !== "CANCELLED"} label={stageTone(row.stage)} />, csvValue: (row) => row.stage },
+              { key: "vehicle", header: "Vehicle", render: (row) => <span className={financeStyles.tableWideText}>{row.vehicleBrand} {row.vehicleModel}</span>, csvValue: (row) => `${row.vehicleBrand} ${row.vehicleModel}` },
+              { key: "stage", header: "Status", render: (row) => <span className={financeStyles.statusCell}><FinancePill active={row.stage !== "REJECTED" && row.stage !== "CANCELLED"} label={stageTone(row.stage)} /></span>, csvValue: (row) => row.stage, sortValue: (row) => row.stage },
               { key: "pricingTierId", header: "Tier", render: (row) => tierName(row.pricingTierId), csvValue: (row) => tierName(row.pricingTierId) },
               { key: "aprPct", header: "APR", render: (row) => <span className={financeStyles.number}>{row.aprPct.toFixed(1)}%</span>, sortValue: (row) => row.aprPct },
               { key: "downPaymentPct", header: "Down %", render: (row) => <span className={financeStyles.number}>{row.downPaymentPct.toFixed(1)}%</span>, sortValue: (row) => row.downPaymentPct },
               { key: "financedAmount", header: "Financed amount", render: (row) => <span className={financeStyles.money}>{formatMoney(financedAmount(row, financialPartnerOptions, insurancePartnerOptions))}</span>, csvValue: (row) => financedAmount(row, financialPartnerOptions, insurancePartnerOptions), sortValue: (row) => financedAmount(row, financialPartnerOptions, insurancePartnerOptions) },
-              ...(!isSales ? [{ key: "financialPartnerId", header: "Partner", render: (row: FinanceApplication) => <span className={financeStyles.tableText}>{partnerName(row.financialPartnerId, financialPartnerOptions)}</span>, csvValue: (row: FinanceApplication) => partnerName(row.financialPartnerId, financialPartnerOptions) }] : []),
+              ...(!isSales ? [{ key: "financialPartnerId", header: "Partner", render: (row: FinanceApplication) => <span className={financeStyles.tableWideText}>{partnerName(row.financialPartnerId, financialPartnerOptions)}</span>, csvValue: (row: FinanceApplication) => partnerName(row.financialPartnerId, financialPartnerOptions) }] : []),
               { key: "createdAt", header: "Created", render: (row) => formatDate(row.createdAt), sortValue: (row) => row.createdAt }
             ]}
           />

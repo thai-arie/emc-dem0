@@ -60,6 +60,43 @@
   vertical-align: bottom;
 }
 
+.tableId {
+  display: inline-block;
+  width: 88px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.tableWideText {
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.statusCell {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.statusCell .pill {
+  max-width: 100%;
+  min-width: 0;
+  padding-inline: 7px;
+  font-size: 10px;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .money,
 .number {
   font-variant-numeric: tabular-nums;
