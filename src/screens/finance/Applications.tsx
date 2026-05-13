@@ -132,7 +132,7 @@ export default function Applications() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("edit");
   const [loaded, setLoaded] = useState<FinanceApplication[]>([]);
-  const [pipelineScope, setPipelineScope] = useState<"active" | "all" | "APPROVED" | "REJECTED" | "CANCELLED">("active");
+  const [pipelineScope, setPipelineScope] = useState<"active" | "all" | "converted" | "APPROVED" | "REJECTED" | "CANCELLED">("active");
   const [stageFilter, setStageFilter] = useState<"all" | ApplicationStage>("all");
   const [financialPartnerFilter, setFinancialPartnerFilter] = useState("all");
   const [insurancePartnerFilter, setInsurancePartnerFilter] = useState("all");
@@ -178,7 +178,8 @@ export default function Applications() {
   const filteredApplications = useMemo(
     () =>
       applications.filter((application) => {
-        if (pipelineScope === "active" && !activePipelineStages.includes(application.stage)) return false;
+        if (pipelineScope === "active" && (application.convertedContractId || !activePipelineStages.includes(application.stage))) return false;
+        if (pipelineScope === "converted" && !application.convertedContractId) return false;
         if (pipelineScope === "APPROVED" && application.stage !== "APPROVED") return false;
         if (pipelineScope === "REJECTED" && application.stage !== "REJECTED") return false;
         if (pipelineScope === "CANCELLED" && application.stage !== "CANCELLED") return false;
@@ -256,7 +257,7 @@ export default function Applications() {
               <span>Pipeline view</span>
               <select value={pipelineScope} onChange={(event) => setPipelineScope(event.target.value as typeof pipelineScope)}>
                 <option value="active">Active pipeline</option>
-                <option value="all">All records</option>
+                <option value="all">All records</option>\n                <option value="converted">Converted only</option>
                 <option value="APPROVED">Approved only</option>
                 <option value="REJECTED">Rejected only</option>
                 <option value="CANCELLED">Cancelled only</option>
@@ -322,7 +323,7 @@ export default function Applications() {
               { key: "id", header: "Application ID", render: (row) => <span className={financeStyles.tableId}>{row.id}</span> },
               { key: "clientFullName", header: "Client" },
               { key: "vehicle", header: "Vehicle", render: (row) => <span className={financeStyles.tableWideText}>{row.vehicleBrand} {row.vehicleModel}</span>, csvValue: (row) => `${row.vehicleBrand} ${row.vehicleModel}` },
-              { key: "stage", header: "Status", render: (row) => <span className={financeStyles.statusCell}><FinancePill active={row.stage !== "REJECTED" && row.stage !== "CANCELLED"} label={stageTone(row.stage)} /></span>, csvValue: (row) => row.stage, sortValue: (row) => row.stage },
+              { key: "stage", header: "Status", render: (row) => <span className={financeStyles.statusCell}><FinancePill active={Boolean(row.convertedContractId) || (row.stage !== "REJECTED" && row.stage !== "CANCELLED")} label={row.convertedContractId ? "CONVERTED" : stageTone(row.stage)} /></span>, csvValue: (row) => row.convertedContractId ? "CONVERTED" : row.stage, sortValue: (row) => row.convertedContractId ? "CONVERTED" : row.stage },
               { key: "pricingTierId", header: "Tier", render: (row) => tierName(row.pricingTierId), csvValue: (row) => tierName(row.pricingTierId) },
               { key: "aprPct", header: "APR", render: (row) => <span className={financeStyles.number}>{row.aprPct.toFixed(1)}%</span>, sortValue: (row) => row.aprPct },
               { key: "downPaymentPct", header: "Down %", render: (row) => <span className={financeStyles.number}>{row.downPaymentPct.toFixed(1)}%</span>, sortValue: (row) => row.downPaymentPct },
