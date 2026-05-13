@@ -1947,7 +1947,7 @@ app.post("/applications/:id/convert-to-contract", (req, res) => {
   if (!application.client_full_name || !application.client_phone) return res.status(400).json({ error: "Missing client identity fields" });
 
   const suffix = String(Date.now()).slice(-4);
-  const contractId = `KT-${suffix}`;
+  const contractId = `KT-APP-${String(application.id).slice(-7)}`;
   const vehicleId = nextId("VEH");
   const gpsId = nextId("GPS");
   const vin = `APP-${String(application.id).slice(-6)}`;
@@ -1956,20 +1956,10 @@ app.post("/applications/:id/convert-to-contract", (req, res) => {
   const startDate = new Date();
   const startIso = startDate.toISOString();
 
-  const existingClient = row<any>(
-    `SELECT * FROM clients
-     WHERE (? != '' AND national_id = ?)
-        OR (? != '' AND phone = ?)
-     LIMIT 1`,
-    [
-      application.client_national_id || "",
-      application.client_national_id || "",
-      application.client_phone || "",
-      application.client_phone || ""
-    ]
-  );
-
-  const clientId = existingClient?.id || nextId("CL");
+  // MVP conversion: always create a new client snapshot from the approved application.
+  // Do not reuse by phone/national_id yet; demo data can collide and show the wrong borrower.
+  const existingClient = null;
+  const clientId = nextId("CL");
 
   const tx = db.transaction(() => {
     if (!existingClient) {

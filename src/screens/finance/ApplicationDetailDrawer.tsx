@@ -184,8 +184,9 @@ export default function ApplicationDetailDrawer({
   const isSales = role === "SALES";
   const canSeeInternalEconomics = role === "ADMIN" || role === "FINANCE";
   const canReviewDocuments = role === "ADMIN" || role === "FINANCE";
-  const canEditDocuments = role === "ADMIN" || role === "FINANCE" || role === "SALES";
-  const canEditStage = role === "ADMIN" || role === "FINANCE";
+  const isConverted = Boolean(application.convertedContractId);
+  const canEditDocuments = !isConverted && (role === "ADMIN" || role === "FINANCE" || role === "SALES");
+  const canEditStage = !isConverted && (role === "ADMIN" || role === "FINANCE");
   const stageOptions: FinanceApplication["stage"][] = ["DRAFT", "DOCS_PENDING", "BANK_REVIEW", "READY_TO_SIGN", "APPROVED", "REJECTED", "CANCELLED"];
   const writableDocumentStatuses = canReviewDocuments ? documentStatuses : salesDocumentStatuses;
   const partnerOptions = financialPartnerOptions.length ? financialPartnerOptions : fallbackFinancialPartners;
@@ -1236,7 +1237,9 @@ export default function ApplicationDetailDrawer({
           <div>
             {canPrintSummary ? <button className="secondary-button" type="button" onClick={printSummary}>Print Summary</button> : null}
             <button className="secondary-button" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="button" className="primary-button" onClick={save} disabled={saving || !onSave}>{saving ? "Saving..." : "Save application"}</button>
+            {!isConverted ? (
+              <button type="button" className="primary-button" onClick={save} disabled={saving || !onSave}>{saving ? "Saving..." : "Save application"}</button>
+            ) : null}
           </div>
         </div>
       </div>
