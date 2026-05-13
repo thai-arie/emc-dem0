@@ -535,3 +535,15 @@ export const api = {
 export function actorFromUser(user: { id: string; role: Role } | null): ActorPayload {
   return { actor_id: user?.id ?? "USR-COL", actor_role: user?.role ?? "COLLECTIONS_AGENT" };
 }
+
+
+export async function convertApplicationToContract(applicationId: string) {
+  return request<{
+    contract_id: string;
+    application_id: string;
+    client_id: string;
+    vehicle_id: string;
+    gps_device_id: string;
+    installments_created: number;
+  }>(`/applications/${applicationId}/convert-to-contract`, { method: "POST" });
+}

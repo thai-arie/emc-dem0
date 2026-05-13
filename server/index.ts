@@ -1907,6 +1907,129 @@ app.post("/contracts", (req, res) => {
   res.status(201).json(row<any>("SELECT * FROM contracts WHERE id = ?", [contractId]));
 });
 
+
+app.post("/applications/:id/convert-to-contract", (req, res) => {
+  if (!requirePermission(req, res, "contract.create")) return;
+  const a = actor(req);
+  const at = nowIso();
+
+  const application = row<any>("SELECT * FROM applications WHERE id = ?", [req.params.id]);
+  if (!application) return res.status(404).json({ error: "Application not found" });
+
+  if (application.converted_contract_id) {
+    return res.status(409).json({ error: "Application already converted", contract_id: application.converted_contract_id });
+  }
+
+  if (!["READY_TO_SIGN", "APPROVED"].includes(application.stage)) {
+    return res.status(400).json({ error: "Application is not ready for conversion" });
+  }
+
+  const requiredDocs = ["NATIONAL_ID_OR_PASSPORT", "DRIVER_LICENSE", "SIGNED_APPLICATION"];
+  const docs = rows<any>("SELECT * FROM application_documents WHERE application_id = ?", [application.id]);
+
+  const missingRequired = requiredDocs.filter((docType) => {
+    const matching = docs.filter((doc) => doc.document_type === docType);
+    return !matching.some((doc) => ["REVIEWED", "WAIVED"].includes(doc.status));
+  });
+
+  if (missingRequired.length) {
+    return res.status(400).json({ error: "KYC requirements incomplete", missing: missingRequired });
+  }
+
+  const rejectedRequired = docs.filter((doc) => requiredDocs.includes(doc.document_type) && doc.status === "REJECTED");
+  if (rejectedRequired.length) return res.status(400).json({ error: "Rejected KYC documents present" });
+
+  const financedAmount = Number(application.vehicle_price_cents || 0) - Number(application.down_payment_cents || 0);
+  const termMonths = Math.max(1, Number(application.term_months || 0));
+
+  if (financedAmount <= 0) return res.status(400).json({ error: "Invalid financed amount" });
+  if (termMonths <= 0) return res.status(400).json({ error: "Invalid term months" });
+  if (!application.client_full_name || !application.client_phone) return res.status(400).json({ error: "Missing client identity fields" });
+
+  const suffix = String(Date.now()).slice(-4);
+  const contractId = `KT-${suffix}`;
+  const vehicleId = nextId("VEH");
+  const gpsId = nextId("GPS");
+  const vin = `APP-${String(application.id).slice(-6)}`;
+  const plate = `PENDING-${String(application.id).slice(-4)}`;
+  const monthly = Math.round(financedAmount / termMonths);
+  const startDate = new Date();
+  const startIso = startDate.toISOString();
+
+  const existingClient = row<any>(
+    `SELECT * FROM clients
+     WHERE (? != '' AND national_id = ?)
+        OR (? != '' AND phone = ?)
+     LIMIT 1`,
+    [
+      application.client_national_id || "",
+      application.client_national_id || "",
+      application.client_phone || "",
+      application.client_phone || ""
+    ]
+  );
+
+  const clientId = existingClient?.id || nextId("CL");
+
+  const tx = db.transaction(() => {
+    if (!existingClient) {
+      db.prepare(`
+        INSERT INTO clients (id, full_name, phone, address, national_id, emergency_contact_name, emergency_contact_phone)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(clientId, application.client_full_name, application.client_phone, "", application.client_national_id || "", "", "");
+    }
+
+    db.prepare(`
+      INSERT INTO contracts (id, client_id, vehicle_id, status, monthly_total, start_date, term_months, vehicle_price, down_payment, financed_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(contractId, clientId, vehicleId, "ACTIVE", monthly, startIso, termMonths, application.vehicle_price_cents, application.down_payment_cents, financedAmount);
+
+    db.prepare("INSERT INTO vehicles VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+      vehicleId,
+      vin,
+      application.vehicle_brand || "Unknown",
+      application.vehicle_model || "Unknown",
+      plate,
+      contractId,
+      gpsId
+    );
+
+    db.prepare("INSERT INTO gps_devices (id, vehicle_id, status, lat, lng, last_ping_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+      gpsId,
+      vehicleId,
+      "ONLINE",
+      11.5564,
+      104.9282,
+      at
+    );
+
+    for (let i = 1; i <= termMonths; i += 1) {
+      const due = new Date(startDate);
+      due.setUTCMonth(startDate.getUTCMonth() + i);
+      db.prepare("INSERT INTO installments VALUES (?, ?, ?, ?, ?, ?, ?)").run(nextId("INS"), contractId, i, due.toISOString(), monthly, "SCHEDULED", null);
+    }
+
+    db.prepare("UPDATE applications SET converted_contract_id = ?, converted_at = ?, updated_at = ? WHERE id = ?").run(contractId, at, at, application.id);
+
+    audit(a.actor_id, a.actor_role, "application", application.id, "application.converted", null, { contract_id: contractId });
+    audit(a.actor_id, a.actor_role, "contract", contractId, "contract.created_from_application", null, { application_id: application.id });
+    audit(a.actor_id, a.actor_role, "vehicle", vehicleId, "vehicle.created_from_application", null, { application_id: application.id, contract_id: contractId });
+    audit(a.actor_id, a.actor_role, "installment", contractId, "installments.generated_from_application", null, { application_id: application.id, count: termMonths });
+  });
+
+  tx();
+
+  res.status(201).json({
+    contract_id: contractId,
+    application_id: application.id,
+    client_id: clientId,
+    vehicle_id: vehicleId,
+    gps_device_id: gpsId,
+    installments_created: termMonths
+  });
+});
+
+
 app.post("/contracts/:id/void", (req, res) => {
   if (!requirePermission(req, res, "contract.void")) return;
 

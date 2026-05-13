@@ -3,7 +3,7 @@ import Drawer from "../../components/Drawer";
 import type { Role } from "../../entities/types";
 import { formatDate } from "../../lib/formatDate";
 import { formatMoney } from "../../lib/formatMoney";
-import { api, applicationDocumentFileUrl, type ApplicationConversionPreviewResponse, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
+import { api, applicationDocumentFileUrl, convertApplicationToContract, type ApplicationConversionPreviewResponse, type ApplicationDocumentPayload, type ApplicationDocumentRecord, type ApplicationDocumentStatusRecord, type ApplicationDocumentTypeRecord, type ApplicationPayload } from "../../services/api";
 import { useAuth } from "../../store/auth";
 import ApplicationDealPreview from "./ApplicationDealPreview";
 import { calculateDealPreview, generateInstallmentSchedulePreview } from "./applicationDealMath";
@@ -970,6 +970,31 @@ export default function ApplicationDetailDrawer({
                       ))}
                     </ul>
                     <p>Warnings do not block conversion readiness.</p>
+                  </div>
+
+                ) : null}
+
+                {conversionReadiness.convertible &&
+                !application.convertedContractId &&
+                (role === "ADMIN" || role === "FINANCE") ? (
+                  <div style={{ marginTop: 16 }}>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const result = await convertApplicationToContract(application.id);
+
+                          alert(`Contract created: ${result.contract_id}`);
+
+                          window.location.reload();
+                        } catch (error: any) {
+                          alert(error?.message || "Conversion failed");
+                        }
+                      }}
+                    >
+                      Convert to Contract
+                    </button>
                   </div>
                 ) : null}
               </div>
